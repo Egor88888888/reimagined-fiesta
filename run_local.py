@@ -1542,7 +1542,12 @@ class LightweightPipeline:
                     return result
                 except Exception as e:
                     logger.warning(f"Bank statement parsing failed: {e}")
+                    import traceback
+                    logger.warning(traceback.format_exc())
                     result["warnings"].append(f"Ошибка при обработке банковской выписки: {e}")
+                    result["status"] = "failed"
+                    result["processing_time_ms"] = int((time.time() - start) * 1000)
+                    return result  # Don't fall through to image decode for structured files
 
             # Step 1: Decode image (with HEIC/HEIF support)
             if HAS_CV2:
@@ -1557,10 +1562,15 @@ class LightweightPipeline:
                         try:
                             import pillow_heif
                             pillow_heif.register_heif_opener()
-                        except ImportError:
+                        except (ImportError, Exception):
                             pass
                         pimg = PILImage.open(BIO(image_bytes))
-                        pimg = pimg.convert("RGB")
+                        # Fix for pillow-heif compatibility: convert HeifImageFile to regular PIL Image
+                        if pimg.mode not in ('RGB', 'L', 'RGBA'):
+                            pimg = pimg.convert("RGB")
+                        else:
+                            # Force copy to regular PIL Image to avoid HeifImageFile.mode setter issue
+                            pimg = pimg.copy().convert("RGB")
                         image = cv2.cvtColor(np.array(pimg), cv2.COLOR_RGB2BGR)
                         logger.info(f"Decoded via Pillow (HEIC/other): {image.shape[1]}x{image.shape[0]}")
                     except Exception as e2:
