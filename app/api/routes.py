@@ -19,6 +19,7 @@ from app.api.schemas import (
     RecognitionResponse, RecognitionListItem, UsageSummary, HealthResponse,
 )
 from app.core.orchestrator import get_pipeline
+from app.ml.corrector import get_corrector
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -233,6 +234,17 @@ async def recognize_document(
     try:
         pipeline = get_pipeline()
         result = pipeline.process(image_bytes, document_type_hint=document_type)
+
+        # Step 5.5: Apply ML corrections to extracted fields
+        if result.fields and result.document_type != "unknown":
+            try:
+                corrector = get_corrector()
+                result.fields = await corrector.correct_fields(
+                    db, result.document_type, result.fields
+                )
+                logger.info("ML corrections applied successfully")
+            except Exception as e:
+                logger.warning(f"ML correction failed (non-fatal): {e}")
 
         # Update recognition record
         recognition.status = RecognitionStatus.COMPLETED

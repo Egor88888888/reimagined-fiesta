@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse
 
 from app.config import get_settings
 from app.api.routes import router as api_router
+from app.api.ml_routes import router as ml_router
 from app.models.database import init_db
 
 settings = get_settings()
@@ -28,8 +29,22 @@ logger = logging.getLogger("doclens")
 async def lifespan(app: FastAPI):
     """Startup / shutdown."""
     logger.info(f"Starting DocLens v{settings.APP_VERSION}")
+
+    # Import ML models so their tables are created
+    import app.ml.models  # noqa: F401
+
     await init_db()
-    logger.info("Database initialized")
+    logger.info("Database initialized (including ML tables)")
+
+    # Try to load ML model on startup
+    try:
+        from app.ml.corrector import get_corrector
+        corrector = get_corrector()
+        corrector.load_ml_model()
+        logger.info("ML corrector model loaded")
+    except Exception as e:
+        logger.info(f"ML model not available yet (will learn from feedback): {e}")
+
     yield
     logger.info("Shutting down DocLens")
 
@@ -59,6 +74,7 @@ templates = Jinja2Templates(directory="templates")
 
 # API routes
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(ml_router, prefix="/api/v1")
 
 
 # ============================================================

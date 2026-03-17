@@ -26,7 +26,7 @@ RUN pip install --no-cache-dir -r requirements-render.txt
 
 COPY --chown=doclens:doclens . .
 
-RUN mkdir -p static templates && \
+RUN mkdir -p static templates ml_models && \
     chown -R doclens:doclens /app
 
 USER doclens

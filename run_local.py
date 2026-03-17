@@ -90,6 +90,11 @@ class InMemoryDB:
         self.api_keys = {}  # key_hash -> {tenant_id, name, ...}
         self.recognitions = {}
         self.usage = defaultdict(lambda: {"count": 0, "success": 0, "failed": 0, "ms": 0})
+        # ML / Active Learning storage
+        self.corrections = {}           # correction_id -> {recognition_id, field_name, original, corrected, ...}
+        self.correction_patterns = {}   # pattern_id -> {doc_type, field_name, error, correction, count, confidence}
+        self.training_runs = []         # [{id, status, accuracy_before, accuracy_after, ...}]
+        self.ml_model_data = None       # In-memory model (substitution matrix + vocab)
 
     def create_tenant(self, name: str, email: str, plan: str = "free") -> dict:
         tid = str(uuid.uuid4())
@@ -160,8 +165,348 @@ class InMemoryDB:
             "avg_processing_ms": round(u["ms"] / max(u["count"], 1), 1),
         }
 
+    # === ML / Active Learning Methods ===
+
+    def save_correction(self, tenant_id: str, recognition_id: str,
+                        document_type: str, field_name: str,
+                        original_value: str, corrected_value: str,
+                        confidence: float = 0.0) -> dict:
+        """Save a user correction for ML learning."""
+        if original_value.strip() == corrected_value.strip():
+            return None
+
+        cid = str(uuid.uuid4())
+        # Auto-approve if we've seen this exact correction 3+ times
+        matching = sum(
+            1 for c in self.corrections.values()
+            if c["document_type"] == document_type
+            and c["field_name"] == field_name
+            and c["original_value"] == original_value
+            and c["corrected_value"] == corrected_value
+            and c["status"] in ("approved", "trained")
+        )
+        status = "approved" if matching >= 2 else "pending"
+
+        correction = {
+            "id": cid, "tenant_id": tenant_id,
+            "recognition_id": recognition_id,
+            "document_type": document_type,
+            "field_name": field_name,
+            "original_value": original_value,
+            "corrected_value": corrected_value,
+            "original_confidence": confidence,
+            "status": status,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.corrections[cid] = correction
+
+        # Auto-extract patterns when we accumulate enough corrections
+        pending_count = sum(
+            1 for c in self.corrections.values()
+            if c["document_type"] == document_type
+            and c["status"] in ("pending", "approved")
+        )
+        if pending_count >= 10:
+            self._extract_patterns(document_type)
+
+        return correction
+
+    def _extract_patterns(self, document_type: str = None):
+        """Extract error patterns from corrections."""
+        from difflib import SequenceMatcher
+
+        corrections = [
+            c for c in self.corrections.values()
+            if c["status"] in ("pending", "approved")
+            and (document_type is None or c["document_type"] == document_type)
+        ]
+
+        # Group by (doc_type, field_name)
+        grouped = defaultdict(list)
+        for c in corrections:
+            grouped[(c["document_type"], c["field_name"])].append(c)
+
+        for (doc_type, field_name), field_corrections in grouped.items():
+            # Character substitution patterns
+            char_subs = defaultdict(int)
+            for c in field_corrections:
+                matcher = SequenceMatcher(None, c["original_value"], c["corrected_value"])
+                for op, i1, i2, j1, j2 in matcher.get_opcodes():
+                    if op == "replace":
+                        old_chunk = c["original_value"][i1:i2]
+                        new_chunk = c["corrected_value"][j1:j2]
+                        if len(old_chunk) <= 3 and len(new_chunk) <= 3:
+                            char_subs[(old_chunk, new_chunk)] += 1
+
+            for (error, correct), count in char_subs.items():
+                if count < 2:
+                    continue
+                # Upsert pattern
+                existing = None
+                for p in self.correction_patterns.values():
+                    if (p["document_type"] == doc_type and p["field_name"] == field_name
+                            and p["error_pattern"] == error and p["correction"] == correct):
+                        existing = p
+                        break
+
+                if existing:
+                    existing["occurrence_count"] += count
+                    existing["confidence"] = min(0.99, 0.5 + existing["occurrence_count"] * 0.05)
+                else:
+                    pid = str(uuid.uuid4())
+                    self.correction_patterns[pid] = {
+                        "id": pid, "document_type": doc_type, "field_name": field_name,
+                        "error_pattern": error, "correction": correct,
+                        "pattern_type": "char_substitution",
+                        "occurrence_count": count,
+                        "confidence": min(0.99, 0.5 + count * 0.05),
+                        "is_active": True,
+                    }
+
+    def get_correction_stats(self, document_type: str = None) -> dict:
+        """Get correction and pattern stats."""
+        corrections = [c for c in self.corrections.values()
+                       if document_type is None or c["document_type"] == document_type]
+        by_status = defaultdict(int)
+        for c in corrections:
+            by_status[c["status"]] += 1
+
+        patterns = [p for p in self.correction_patterns.values()
+                    if p["is_active"]
+                    and (document_type is None or p["document_type"] == document_type)]
+
+        return {
+            "total_corrections": len(corrections),
+            "by_status": dict(by_status),
+            "active_patterns": len(patterns),
+            "ready_for_training": len(corrections) >= 20,
+        }
+
 
 db = InMemoryDB()
+
+
+# ============================================================
+# ML Field Corrector (inline for standalone mode)
+# ============================================================
+
+# Common OCR char fixes: Latin/digit ↔ Cyrillic
+_CYRILLIC_OCR_FIXES = {
+    "A": "А", "B": "В", "C": "С", "E": "Е", "H": "Н",
+    "K": "К", "M": "М", "O": "О", "P": "Р", "T": "Т",
+    "X": "Х", "a": "а", "c": "с", "e": "е", "o": "о",
+    "p": "р", "x": "х", "y": "у",
+}
+_DIGIT_FIXES = {
+    "О": "0", "о": "0", "З": "3", "з": "3",
+    "б": "6", "В": "8", "l": "1", "I": "1", "S": "5",
+}
+
+# Field format rules for Russian documents
+_FIELD_RULES = {
+    "passport_rf": {
+        "series": {"digits": True, "format": r"^\d{2}\s\d{2}$"},
+        "number": {"digits": True, "format": r"^\d{6}$"},
+        "department_code": {"digits": True, "format": r"^\d{3}-\d{3}$"},
+        "issue_date": {"date": True},
+        "birth_date": {"date": True},
+        "sex": {"pattern": r"^[МЖ]$"},
+        "last_name": {"cyrillic": True},
+        "first_name": {"cyrillic": True},
+        "patronymic": {"cyrillic": True},
+    },
+    "snils": {
+        "number": {"digits": True, "format": r"^\d{3}-\d{3}-\d{3}\s\d{2}$"},
+    },
+}
+
+
+def ml_correct_fields(document_type: str, fields: dict) -> dict:
+    """Apply ML corrections to OCR-extracted fields.
+
+    3-tier correction:
+    1. Format fixes (domain knowledge)
+    2. Character substitution fixes (Cyrillic ↔ Latin/digits)
+    3. Learned patterns from user feedback
+    """
+    rules = _FIELD_RULES.get(document_type, {})
+    corrected = {}
+
+    for name, fdata in fields.items():
+        if not isinstance(fdata, dict) or "value" not in fdata:
+            corrected[name] = fdata
+            continue
+
+        value = fdata["value"]
+        original = value
+        field_rules = rules.get(name, {})
+
+        # Tier 1: Format corrections
+        if field_rules.get("digits"):
+            # Replace Cyrillic lookalikes with digits
+            value = "".join(_DIGIT_FIXES.get(ch, ch) for ch in value)
+
+            # Fix department code format
+            if name == "department_code":
+                digits = re.sub(r"\D", "", value)
+                if len(digits) == 6:
+                    value = f"{digits[:3]}-{digits[3:]}"
+
+            # Fix SNILS format
+            if name == "number" and document_type == "snils":
+                digits = re.sub(r"\D", "", value)
+                if len(digits) == 11:
+                    value = f"{digits[:3]}-{digits[3:6]}-{digits[6:9]} {digits[9:]}"
+
+        if field_rules.get("date"):
+            value = re.sub(r"[\-/]", ".", value)
+            m = re.match(r"(\d{1,2})\.(\d{1,2})\.(\d{4})", value)
+            if m:
+                value = f"{m.group(1).zfill(2)}.{m.group(2).zfill(2)}.{m.group(3)}"
+
+        if field_rules.get("cyrillic"):
+            # Replace Latin lookalikes with Cyrillic
+            value = "".join(
+                _CYRILLIC_OCR_FIXES.get(ch, ch) if not ch.isdigit() else ch
+                for ch in value
+            )
+            # Proper capitalization: ИВАНОВ → Иванов
+            if value == value.upper() and len(value) > 1:
+                parts = value.split("-")
+                value = "-".join(p.capitalize() for p in parts)
+
+        # Tier 2: Learned patterns from user feedback
+        for p in db.correction_patterns.values():
+            if (p["is_active"] and p["confidence"] >= 0.6
+                    and p["document_type"] == document_type
+                    and p["field_name"] == name):
+                if p["pattern_type"] == "char_substitution" and p["error_pattern"] in value:
+                    value = value.replace(p["error_pattern"], p["correction"])
+
+        # Tier 3: ML model correction (if trained)
+        if db.ml_model_data and fdata.get("confidence", 1.0) < 0.9:
+            try:
+                sub_matrix = db.ml_model_data.get("substitution_matrix")
+                vocab = db.ml_model_data.get("vocab")
+                if sub_matrix is not None and vocab is not None:
+                    new_chars = []
+                    for ch in value:
+                        if ch in vocab:
+                            idx = vocab[ch]
+                            if idx < sub_matrix.shape[0]:
+                                row = sub_matrix[idx]
+                                best_idx = int(np.argmax(row))
+                                if row[best_idx] > 0.7 and row[idx] < 0.5 and best_idx != idx:
+                                    rev = {v: k for k, v in vocab.items()}
+                                    if best_idx in rev:
+                                        new_chars.append(rev[best_idx])
+                                        continue
+                        new_chars.append(ch)
+                    value = "".join(new_chars)
+            except Exception as e:
+                logger.warning(f"ML model correction failed: {e}")
+
+        # Build result
+        cf = dict(fdata)
+        if value != original:
+            cf["value"] = value
+            cf["original_ocr_value"] = original
+            cf["ml_corrected"] = True
+            cf["confidence"] = min(0.99, fdata.get("confidence", 0.5) + 0.05)
+            logger.info(f"ML corrected {name}: '{original}' → '{value}'")
+        corrected[name] = cf
+
+    return corrected
+
+
+def ml_train_model(document_type: str = None, force: bool = False) -> dict:
+    """Train ML model from accumulated corrections.
+
+    Builds a character substitution probability matrix.
+    """
+    corrections = [
+        c for c in db.corrections.values()
+        if c["status"] in ("pending", "approved")
+        and (document_type is None or c["document_type"] == document_type)
+    ]
+
+    if len(corrections) < 20 and not force:
+        return {
+            "status": "failed",
+            "error": f"Need at least 20 corrections, have {len(corrections)}",
+        }
+
+    start = time.time()
+
+    # Extract patterns first
+    db._extract_patterns(document_type)
+
+    # Build substitution matrix
+    all_chars = set()
+    for c in corrections:
+        all_chars.update(c["original_value"])
+        all_chars.update(c["corrected_value"])
+
+    vocab = {ch: i for i, ch in enumerate(sorted(all_chars))}
+    n = len(vocab)
+    if n == 0:
+        return {"status": "failed", "error": "No character data"}
+
+    counts = np.zeros((n, n), dtype=np.float64)
+    for c in corrections:
+        orig, corr = c["original_value"], c["corrected_value"]
+        for o_ch, c_ch in zip(orig, corr) if len(orig) == len(corr) else []:
+            if o_ch in vocab and c_ch in vocab:
+                counts[vocab[o_ch]][vocab[c_ch]] += 1
+
+    row_sums = counts.sum(axis=1, keepdims=True)
+    row_sums[row_sums == 0] = 1
+    matrix = counts / row_sums
+    matrix = matrix * 0.7 + np.eye(n) * 0.3
+    row_sums = matrix.sum(axis=1, keepdims=True)
+    matrix = matrix / row_sums
+
+    # Evaluate
+    test_n = max(1, len(corrections) // 5)
+    test = corrections[-test_n:]
+    acc_before = sum(1 for c in test if c["original_value"] == c["corrected_value"]) / len(test)
+
+    correct = 0
+    for c in test:
+        predicted = "".join(
+            (lambda idx, row: (
+                {v: k for k, v in vocab.items()}.get(int(np.argmax(row)), ch)
+                if row[int(np.argmax(row))] > 0.6 and int(np.argmax(row)) != idx
+                else ch
+            ))(vocab.get(ch, 0), matrix[vocab[ch]] if ch in vocab and vocab[ch] < n else np.zeros(n))
+            for ch in c["original_value"]
+        )
+        if predicted == c["corrected_value"]:
+            correct += 1
+    acc_after = correct / len(test)
+
+    # Save model in memory
+    db.ml_model_data = {"substitution_matrix": matrix, "vocab": vocab}
+
+    # Mark corrections as trained
+    for c in corrections:
+        c["status"] = "trained"
+
+    duration = int(time.time() - start)
+    run_id = str(uuid.uuid4())
+    run = {
+        "id": run_id, "status": "completed",
+        "corrections_count": len(corrections),
+        "patterns_generated": len(db.correction_patterns),
+        "accuracy_before": round(acc_before, 4),
+        "accuracy_after": round(acc_after, 4),
+        "duration_seconds": duration,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    db.training_runs.append(run)
+    logger.info(f"ML training complete: {acc_before:.1%} → {acc_after:.1%}, "
+                f"{len(corrections)} corrections, {duration}s")
+    return run
 
 
 # ============================================================
@@ -3981,6 +4326,14 @@ async def recognize(
     result = pipeline.process(image_bytes, document_type_hint=document_type)
     result["original_filename"] = file.filename
 
+    # Apply ML corrections to extracted fields
+    if result.get("fields") and result.get("document_type", "unknown") != "unknown":
+        try:
+            result["fields"] = ml_correct_fields(result["document_type"], result["fields"])
+            logger.info("ML corrections applied")
+        except Exception as e:
+            logger.warning(f"ML correction failed (non-fatal): {e}")
+
     # Sanitize numpy types for JSON serialization
     result = sanitize_for_json(result)
 
@@ -4066,6 +4419,141 @@ async def debug_ocr(
                 debug_info["tess_languages"] = ["unknown"]
 
     return debug_info
+
+
+# ============================================================
+# ML / Active Learning API
+# ============================================================
+
+@app.post("/api/v1/ml/corrections")
+async def submit_corrections(request: Request, tenant: dict = Depends(get_tenant)):
+    """Submit field corrections for ML learning.
+
+    Body: {
+        "recognition_id": "...",
+        "document_type": "passport_rf",
+        "corrections": [
+            {"field_name": "last_name", "original_value": "ЛЪЯКОВ", "corrected_value": "ДЬЯКОВ", "confidence": 0.8}
+        ]
+    }
+    """
+    data = await request.json()
+    recognition_id = data.get("recognition_id", "")
+    document_type = data.get("document_type", "")
+    corrections_data = data.get("corrections", [])
+
+    if not corrections_data:
+        raise HTTPException(400, "No corrections provided")
+
+    saved = []
+    for c in corrections_data:
+        result = db.save_correction(
+            tenant_id=tenant["id"],
+            recognition_id=recognition_id,
+            document_type=document_type,
+            field_name=c.get("field_name", ""),
+            original_value=c.get("original_value", ""),
+            corrected_value=c.get("corrected_value", ""),
+            confidence=c.get("confidence", 0.0),
+        )
+        if result:
+            saved.append(result)
+
+    return {
+        "status": "ok",
+        "corrections_saved": len(saved),
+        "message": f"Сохранено {len(saved)} коррекций для обучения",
+    }
+
+
+@app.get("/api/v1/ml/corrections")
+async def list_corrections(
+    document_type: str = None,
+    tenant: dict = Depends(get_tenant),
+):
+    """List corrections submitted by this tenant."""
+    corrections = [
+        c for c in db.corrections.values()
+        if c["tenant_id"] == tenant["id"]
+        and (document_type is None or c["document_type"] == document_type)
+    ]
+    corrections.sort(key=lambda c: c["created_at"], reverse=True)
+    return corrections[:100]
+
+
+@app.get("/api/v1/ml/corrections/stats")
+async def correction_stats(
+    document_type: str = None,
+    tenant: dict = Depends(get_tenant),
+):
+    """Get correction and pattern statistics."""
+    return db.get_correction_stats(document_type)
+
+
+@app.get("/api/v1/ml/patterns")
+async def list_patterns(
+    document_type: str = None,
+    tenant: dict = Depends(get_tenant),
+):
+    """List learned correction patterns."""
+    patterns = [
+        p for p in db.correction_patterns.values()
+        if p["is_active"]
+        and (document_type is None or p["document_type"] == document_type)
+    ]
+    patterns.sort(key=lambda p: p["occurrence_count"], reverse=True)
+    return patterns
+
+
+@app.post("/api/v1/ml/train")
+async def train_model(request: Request, tenant: dict = Depends(get_tenant)):
+    """Train ML model from accumulated corrections.
+
+    Body (optional): {"document_type": "passport_rf", "force": false}
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+
+    document_type = data.get("document_type")
+    force = data.get("force", False)
+
+    result = ml_train_model(document_type, force)
+    return result
+
+
+@app.get("/api/v1/ml/train/status")
+async def training_status(tenant: dict = Depends(get_tenant)):
+    """Get ML system status."""
+    last_run = db.training_runs[-1] if db.training_runs else None
+    pending = sum(1 for c in db.corrections.values() if c["status"] in ("pending", "approved"))
+
+    return {
+        "last_training_run": last_run,
+        "active_patterns": len([p for p in db.correction_patterns.values() if p["is_active"]]),
+        "pending_corrections": pending,
+        "ml_model_loaded": db.ml_model_data is not None,
+        "ready_for_training": pending >= 20,
+    }
+
+
+@app.post("/api/v1/ml/correct")
+async def test_correction(request: Request, tenant: dict = Depends(get_tenant)):
+    """Test ML correction on arbitrary fields (debug endpoint).
+
+    Body: {"document_type": "passport_rf", "fields": {"last_name": {"value": "ЛЪЯКОВ", "confidence": 0.7}}}
+    """
+    data = await request.json()
+    document_type = data.get("document_type", "")
+    fields = data.get("fields", {})
+
+    corrected = ml_correct_fields(document_type, fields)
+    return {
+        "document_type": document_type,
+        "original": fields,
+        "corrected": corrected,
+    }
 
 
 # ============================================================

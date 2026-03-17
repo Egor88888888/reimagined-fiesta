@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
 
+    # ML / Active Learning
+    ML_ENABLED: bool = True                        # Enable ML post-processing
+    ML_MODEL_DIR: str = "/app/ml_models"          # Directory for model artifacts
+    ML_MIN_CORRECTIONS_FOR_TRAINING: int = 20     # Min corrections to start training
+    ML_AUTO_TRAIN_THRESHOLD: int = 100            # Auto-trigger training at N corrections
+    ML_PATTERN_CONFIDENCE_THRESHOLD: float = 0.6  # Min confidence to apply a pattern
+    ML_AUTO_APPROVE_COUNT: int = 3                # Auto-approve after N identical corrections
+
     # External APIs (optional enrichment)
     FMS_CHECK_ENABLED: bool = True
     FNS_CHECK_ENABLED: bool = True
