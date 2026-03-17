@@ -1554,15 +1554,33 @@ class LightweightPipeline:
                 nparr = np.frombuffer(image_bytes, np.uint8)
                 image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-                # If cv2 can't decode, try Pillow (without pillow-heif to avoid mode setter bug)
+                # If cv2 can't decode (e.g. HEIC/HEIF), try pillow-heif directly then Pillow
                 if image is None:
                     try:
-                        from PIL import Image as PILImage
                         from io import BytesIO as BIO
-                        pimg = PILImage.open(BIO(image_bytes))
-                        pimg = pimg.convert("RGB")
-                        image = cv2.cvtColor(np.array(pimg), cv2.COLOR_RGB2BGR)
-                        logger.info(f"Decoded via Pillow (HEIC/other): {image.shape[1]}x{image.shape[0]}")
+                        decoded = False
+                        # Try pillow-heif directly (without register_heif_opener to avoid mode setter bug)
+                        try:
+                            import pillow_heif
+                            heif_image = pillow_heif.open_heif(BIO(image_bytes))
+                            arr = np.asarray(heif_image)
+                            if len(arr.shape) == 3 and arr.shape[2] == 4:
+                                image = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
+                            elif len(arr.shape) == 3 and arr.shape[2] == 3:
+                                image = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+                            else:
+                                image = arr
+                            decoded = True
+                            logger.info(f"Decoded via pillow-heif: {image.shape[1]}x{image.shape[0]}")
+                        except Exception:
+                            pass
+                        # Fallback to standard Pillow (for BMP, TIFF, etc.)
+                        if not decoded:
+                            from PIL import Image as PILImage
+                            pimg = PILImage.open(BIO(image_bytes))
+                            pimg = pimg.convert("RGB")
+                            image = cv2.cvtColor(np.array(pimg), cv2.COLOR_RGB2BGR)
+                            logger.info(f"Decoded via Pillow: {image.shape[1]}x{image.shape[0]}")
                     except Exception as e2:
                         logger.error(f"Image decode failed: {e2}")
                         result["warnings"].append(f"Cannot decode image: {e2}")

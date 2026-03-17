@@ -6,7 +6,7 @@ opencv-python-headless==4.10.0.84
 Pillow==10.4.0
 pytesseract==0.3.10
 easyocr==1.7.1
-# pillow-heif removed: causes mode setter conflict with Pillow
+pillow-heif==0.18.0
 PyMuPDF==1.24.12
 openpyxl==3.1.5
 jinja2==3.1.4
