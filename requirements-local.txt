@@ -1,0 +1,14 @@
+# DocLens - Standalone Local Requirements
+# Works on any Python 3.10+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.18
+numpy
+opencv-python-headless
+Pillow
+
+# OCR engine (optional - requires Python 3.10-3.12)
+# If PaddlePaddle fails to install, DocLens runs in demo mode
+# To enable real OCR, use Python 3.10-3.12 and uncomment:
+# paddlepaddle
+# paddleocr

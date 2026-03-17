@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кабинет — DocLens</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8fafc;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            color: white;
+            padding: 1rem 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        header .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-decoration: none;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        nav a {
+            color: white;
+            text-decoration: none;
+            transition: opacity 0.3s;
+            font-size: 0.95rem;
+        }
+
+        nav a:hover {
+            opacity: 0.8;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .tenant-name {
+            font-size: 0.95rem;
+        }
+
+        .plan-badge {
+            display: inline-block;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .auth-section {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .auth-section h2 {
+            margin-bottom: 1rem;
+            color: #1e3a8a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group {
+            display: flex;
+            gap: 1rem;
+        }
+
+        input[type="password"] {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #2563eb;
+            border: 1px solid #2563eb;
+        }
+
+        .btn-secondary:hover {
+            background: #f0f7ff;
+        }
+
+        .btn-danger {
+            background: white;
+            color: #ef4444;
+            border: 1px solid #ef4444;
+        }
+
+        .btn-danger:hover {
+            background: #fee;
+        }
+
+        .btn-sm {
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        .dashboard-container {
+            padding: 2rem 0;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #1e3a8a;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-sublabel {
+            color: #999;
+            font-size: 0.85rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            margin-bottom: 2rem;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: #1e3a8a;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .api-keys-list {
+            margin-bottom: 2rem;
+        }
+
+        .api-key-item {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .api-key-info {
+            flex: 1;
+        }
+
+        .api-key-name {
+            font-weight: 500;
+            color: #1e3a8a;
+            margin-bottom: 0.25rem;
+        }
+
+        .api-key-value {
+            font-family: 'Monaco', 'Courier New', monospace;
+            color: #666;
+            font-size: 0.85rem;
+            word-break: break-all;
+            background: white;
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+        }
+
+        .api-key-meta {
+            color: #999;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
+
+        .api-key-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+            color: #2563eb;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e2e8f0;
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            color: #c33;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .success {
+            background: #efe;
+            border: 1px solid #cfc;
+            color: #3c3;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .success.show {
+            display: block;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+        }
+
+        .table th,
+        .table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .table th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #1e3a8a;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .table tr:hover {
+            background: #f8fafc;
+        }
+
+        .doc-type-badge {
+            display: inline-block;
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-passport-rf {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-driver-license {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-snils {
+            background: #fce7f3;
+            color: #831843;
+        }
+
+        .badge-inn {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-error {
+            background: #fee;
+            color: #c33;
+        }
+
+        .status-processing {
+            background: #fce7f3;
+            color: #831843;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-header h3 {
+            color: #1e3a8a;
+            margin-bottom: 0.5rem;
+        }
+
+        .modal-body {
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: #999;
+        }
+
+        .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .header-right {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .api-key-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .api-key-actions {
+                width: 100%;
+                margin-top: 1rem;
+            }
+
+            .api-key-actions .btn {
+                flex: 1;
+            }
+
+            .table {
+                font-size: 0.85rem;
+            }
+
+            .table th,
+            .table td {
+                padding: 0.75rem 0.5rem;
+            }
+
+            .form-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <a href="/" class="logo">
+                <span class="logo-icon">📄</span>
+                <span>DocLens</span>
+            </a>
+            <div class="header-right">
+                <div class="user-info">
+                    <div>
+                        <div class="tenant-name" id="tenant-name">Загрузка...</div>
+                        <span class="plan-badge" id="plan-badge">-</span>
+                    </div>
+                </div>
+                <nav>
+                    <a href="/">Главная</a>
+                    <a href="/demo">Демо</a>
+                    <a href="/api/docs">API</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <div class="dashboard-container">
+        <div class="container">
+            <div class="auth-section">
+                <h2>🔐 Аутентификация</h2>
+                <div class="form-group">
+                    <input
+                        type="password"
+                        id="api-key-input"
+                        placeholder="Введите API ключ для доступа в кабинет"
+                    >
+                    <button class="btn btn-primary" id="auth-btn">Войти</button>
+                </div>
+                <div class="error" id="auth-error"></div>
+                <div class="success" id="auth-success"></div>
+            </div>
+
+            <div id="dashboard-content" style="display: none;">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Запросов сегодня</div>
+                        <div class="stat-value" id="today-requests">-</div>
+                        <div class="stat-sublabel" id="today-sublabel">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Осталось</div>
+                        <div class="stat-value" id="remaining-quota">-</div>
+                        <div class="stat-sublabel" id="remaining-sublabel">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Успешность</div>
+                        <div class="stat-value" id="success-rate">-</div>
+                        <div class="stat-sublabel" id="success-sublabel">из последних запросов</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>🔑 API ключи</h2>
+
+                    <button class="btn btn-primary" id="create-key-btn">+ Создать новый ключ</button>
+
+                    <div class="api-keys-list" id="api-keys-list">
+                        <div class="empty-state">
+                            <div class="empty-icon">🔓</div>
+                            <p>Ключи загружаются...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>📋 Последние распознавания</h2>
+
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Дата/Время</th>
+                                <th>Тип документа</th>
+                                <th>Статус</th>
+                                <th>Уверенность</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recognitions-table">
+                            <tr>
+                                <td colspan="4" style="text-align: center; padding: 2rem; color: #999;">
+                                    Загружаются...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="create-key-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Создать новый API ключ</h3>
+                <p style="color: #666; margin-top: 0.5rem;">Введите название для новой пары ключей</p>
+            </div>
+            <div class="modal-body">
+                <input
+                    type="text"
+                    id="key-name-input"
+                    placeholder="Например: Production, Testing"
+                >
+            </div>
+            <div class="error" id="create-key-error"></div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancel-create-btn">Отмена</button>
+                <button class="btn btn-primary" id="confirm-create-btn">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const apiKeyInput = document.getElementById('api-key-input');
+        const authBtn = document.getElementById('auth-btn');
+        const authError = document.getElementById('auth-error');
+        const authSuccess = document.getElementById('auth-success');
+        const dashboardContent = document.getElementById('dashboard-content');
+        const tenantName = document.getElementById('tenant-name');
+        const planBadge = document.getElementById('plan-badge');
+        const todayRequests = document.getElementById('today-requests');
+        const todaySublabel = document.getElementById('today-sublabel');
+        const remainingQuota = document.getElementById('remaining-quota');
+        const remainingSublabel = document.getElementById('remaining-sublabel');
+        const successRate = document.getElementById('success-rate');
+        const apiKeysList = document.getElementById('api-keys-list');
+        const recognitionsTable = document.getElementById('recognitions-table');
+        const createKeyBtn = document.getElementById('create-key-btn');
+        const createKeyModal = document.getElementById('create-key-modal');
+        const keyNameInput = document.getElementById('key-name-input');
+        const confirmCreateBtn = document.getElementById('confirm-create-btn');
+        const cancelCreateBtn = document.getElementById('cancel-create-btn');
+        const createKeyError = document.getElementById('create-key-error');
+
+        let currentApiKey = null;
+
+        authBtn.addEventListener('click', authenticate);
+        apiKeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') authenticate();
+        });
+        createKeyBtn.addEventListener('click', () => createKeyModal.classList.add('show'));
+        cancelCreateBtn.addEventListener('click', () => createKeyModal.classList.remove('show'));
+        confirmCreateBtn.addEventListener('click', createNewKey);
+
+        function showAuthError(message) {
+            authError.textContent = message;
+            authError.classList.add('show');
+        }
+
+        function hideAuthError() {
+            authError.classList.remove('show');
+        }
+
+        function showAuthSuccess(message) {
+            authSuccess.textContent = message;
+            authSuccess.classList.add('show');
+            setTimeout(() => authSuccess.classList.remove('show'), 3000);
+        }
+
+        function showCreateKeyError(message) {
+            createKeyError.textContent = message;
+            createKeyError.classList.add('show');
+        }
+
+        function hideCreateKeyError() {
+            createKeyError.classList.remove('show');
+        }
+
+        async function authenticate() {
+            const key = apiKeyInput.value.trim();
+            if (!key) {
+                showAuthError('Пожалуйста, введите API ключ');
+                return;
+            }
+
+            currentApiKey = key;
+            await loadDashboard();
+        }
+
+        async function loadDashboard() {
+            try {
+                hideAuthError();
+                const headers = { 'Authorization': 'Bearer ' + currentApiKey };
+
+                // Load usage stats
+                const usageResp = await fetch('/api/v1/usage', { headers });
+                const usage = await usageResp.json();
+                if (!usageResp.ok) throw new Error('Ошибка загрузки статистики');
+
+                todayRequests.textContent = usage.today_requests;
+                remainingQuota.textContent = usage.remaining_quota;
+                successRate.textContent = Math.round(usage.success_rate * 100) + '%';
+                todaySublabel.textContent = 'из ' + usage.daily_limit;
+                remainingSublabel.textContent = 'до лимита';
+                tenantName.textContent = usage.tenant_name || 'Кабинет';
+                planBadge.textContent = usage.plan || 'Free';
+
+                // Load API keys
+                const keysResp = await fetch('/api/v1/api-keys', { headers });
+                const keysData = await keysResp.json();
+                if (!keysResp.ok) throw new Error('Ошибка загрузки ключей');
+
+                renderApiKeys(keysData.keys);
+
+                // Load recognitions
+                const recsResp = await fetch('/api/v1/recognitions', { headers });
+                const recsData = await recsResp.json();
+                if (!recsResp.ok) throw new Error('Ошибка загрузки распознаваний');
+
+                renderRecognitions(recsData.recognitions);
+
+                dashboardContent.style.display = 'block';
+                showAuthSuccess('Успешная аутентификация');
+            } catch (err) {
+                showAuthError('Ошибка: ' + err.message);
+                dashboardContent.style.display = 'none';
+            }
+        }
+
+        function renderApiKeys(keys) {
+            if (keys.length === 0) {
+                apiKeysList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">🔑</div>
+                        <p>Ключей не создано</p>
+                        <p style="font-size: 0.9rem; color: #999; margin-top: 0.5rem;">Создайте первый API ключ для начала работы</p>
+                    </div>
+                `;
+                return;
+            }
+
+            apiKeysList.innerHTML = keys.map(key => `
+                <div class="api-key-item">
+                    <div class="api-key-info">
+                        <div class="api-key-name">${key.name}</div>
+                        <div class="api-key-value">${key.key}</div>
+                        <div class="api-key-meta">
+                            Создан: ${new Date(key.created_at).toLocaleDateString('ru-RU')} •
+                            Последний раз использован: ${key.last_used ? new Date(key.last_used).toLocaleDateString('ru-RU') : 'Никогда'}
+                        </div>
+                    </div>
+                    <div class="api-key-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="copyToClipboard('${key.key}')">Копировать</button>
+                        <button class="btn btn-danger btn-sm" onclick="revokeKey('${key.id}')">Отозвать</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderRecognitions(recognitions) {
+            if (recognitions.length === 0) {
+                recognitionsTable.innerHTML = `
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 2rem; color: #999;">
+                            Распознаваний не найдено
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            recognitionsTable.innerHTML = recognitions.map(rec => `
+                <tr>
+                    <td>${new Date(rec.created_at).toLocaleString('ru-RU')}</td>
+                    <td><span class="doc-type-badge badge-${rec.document_type}">${rec.document_type}</span></td>
+                    <td><span class="status-badge status-${rec.status}">${rec.status === 'success' ? '✓ Успешно' : '✗ Ошибка'}</span></td>
+                    <td>${rec.confidence ? Math.round(rec.confidence * 100) + '%' : '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function createNewKey() {
+            const name = keyNameInput.value.trim();
+            if (!name) {
+                showCreateKeyError('Введите название для ключа');
+                return;
+            }
+
+            try {
+                hideCreateKeyError();
+                confirmCreateBtn.disabled = true;
+
+                const resp = await fetch('/api/v1/api-keys', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + currentApiKey,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: name })
+                });
+
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.detail || 'Ошибка создания ключа');
+
+                keyNameInput.value = '';
+                createKeyModal.classList.remove('show');
+                showAuthSuccess('Ключ создан успешно');
+                await loadDashboard();
+            } catch (err) {
+                showCreateKeyError('Ошибка: ' + err.message);
+            } finally {
+                confirmCreateBtn.disabled = false;
+            }
+        }
+
+        async function revokeKey(keyId) {
+            if (!confirm('Вы уверены? Этот ключ больше не будет работать.')) return;
+
+            try {
+                const resp = await fetch(`/api/v1/api-keys/${keyId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + currentApiKey }
+                });
+
+                if (!resp.ok) throw new Error('Ошибка отзыва ключа');
+
+                showAuthSuccess('Ключ отозван');
+                await loadDashboard();
+            } catch (err) {
+                showAuthError('Ошибка: ' + err.message);
+            }
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showAuthSuccess('Скопировано в буфер обмена');
+            });
+        }
+    </script>
+</body>
+</html>

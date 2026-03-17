@@ -1,0 +1,234 @@
+version: "3.8"
+
+# ============================================================
+# DocLens Production Stack
+# ============================================================
+
+services:
+  # ============================================================
+  # FastAPI Server
+  # ============================================================
+  doclens-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: doclens-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Server
+      - HOST=0.0.0.0
+      - PORT=8000
+      - LOG_LEVEL=info
+      - DEMO_MODE=true
+      - MAX_FILE_SIZE_MB=20
+
+      # Database
+      - DATABASE_URL=postgresql+asyncpg://doclens:doclens_pass@doclens-db:5432/doclens
+      - DATABASE_URL_SYNC=postgresql://doclens:doclens_pass@doclens-db:5432/doclens
+
+      # Redis (rate limiting & task queue)
+      - REDIS_URL=redis://doclens-redis:6379/0
+      - CELERY_BROKER_URL=redis://doclens-redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://doclens-redis:6379/2
+
+      # Storage (S3/MinIO)
+      - S3_ENDPOINT=http://doclens-minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET=doclens-documents
+
+      # OCR
+      - OCR_USE_GPU=false
+      - OCR_MAX_IMAGE_SIZE=4096
+      - OCR_MAX_FILE_SIZE=20971520
+
+      # Security
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - DEBUG=false
+
+      # Confidence thresholds
+      - CONFIDENCE_AUTO_FILL=0.95
+      - CONFIDENCE_REVIEW=0.70
+
+    volumes:
+      # OCR models cache
+      - doclens-ocr-models:/home/doclens/.paddleocr
+      - doclens-ocr-models:/root/.paddleocr
+
+      # Uploaded documents (temporary)
+      - doclens-uploads:/tmp/doclens
+
+    depends_on:
+      doclens-db:
+        condition: service_healthy
+      doclens-redis:
+        condition: service_healthy
+      doclens-minio:
+        condition: service_started
+
+    restart: unless-stopped
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================================
+  # Celery Worker (async background tasks)
+  # ============================================================
+  doclens-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: doclens-worker
+    command: celery -A app.worker worker --loglevel=info --concurrency=2
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://doclens:doclens_pass@doclens-db:5432/doclens
+      - DATABASE_URL_SYNC=postgresql://doclens:doclens_pass@doclens-db:5432/doclens
+      - REDIS_URL=redis://doclens-redis:6379/0
+      - CELERY_BROKER_URL=redis://doclens-redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://doclens-redis:6379/2
+      - S3_ENDPOINT=http://doclens-minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - OCR_USE_GPU=false
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+
+    volumes:
+      - doclens-ocr-models:/home/doclens/.paddleocr
+      - doclens-ocr-models:/root/.paddleocr
+      - doclens-uploads:/tmp/doclens
+
+    depends_on:
+      doclens-db:
+        condition: service_healthy
+      doclens-redis:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # ============================================================
+  # PostgreSQL Database
+  # ============================================================
+  doclens-db:
+    image: postgres:16-alpine
+    container_name: doclens-db
+    environment:
+      POSTGRES_USER: doclens
+      POSTGRES_PASSWORD: doclens_pass
+      POSTGRES_DB: doclens
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+
+    volumes:
+      - doclens-pgdata:/var/lib/postgresql/data
+
+    ports:
+      - "5432:5432"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U doclens"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ============================================================
+  # Redis (caching, rate limiting, task queue)
+  # ============================================================
+  doclens-redis:
+    image: redis:7-alpine
+    container_name: doclens-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+    volumes:
+      - doclens-redis-data:/data
+
+    ports:
+      - "6379:6379"
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ============================================================
+  # MinIO (S3-compatible document storage)
+  # ============================================================
+  doclens-minio:
+    image: minio/minio:latest
+    container_name: doclens-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+
+    volumes:
+      - doclens-minio-data:/data
+
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+# ============================================================
+# Volumes
+# ============================================================
+volumes:
+  doclens-pgdata:
+    driver: local
+  doclens-minio-data:
+    driver: local
+  doclens-redis-data:
+    driver: local
+  doclens-ocr-models:
+    driver: local
+  doclens-uploads:
+    driver: local
+
+# ============================================================
+# Networks
+# ============================================================
+networks:
+  default:
+    name: doclens-network
+    driver: bridge

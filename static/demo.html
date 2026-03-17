@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocLens — Document Recognition</title>
+<style>
+:root {
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface-2: #f1f5f9;
+    --surface-3: #e2e8f0;
+    --border: #e2e8f0;
+    --border-2: #cbd5e1;
+    --text: #0f172a;
+    --text-2: #475569;
+    --text-3: #94a3b8;
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --primary-light: #dbeafe;
+    --primary-bg: #eff6ff;
+    --success: #16a34a;
+    --success-light: #dcfce7;
+    --warning: #d97706;
+    --warning-light: #fef3c7;
+    --error: #dc2626;
+    --error-light: #fee2e2;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+    --shadow-lg: 0 4px 12px rgba(0,0,0,.1);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+[data-theme="dark"] {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface-2: #334155;
+    --surface-3: #475569;
+    --border: #334155;
+    --border-2: #475569;
+    --text: #f1f5f9;
+    --text-2: #94a3b8;
+    --text-3: #64748b;
+    --primary-light: #1e3a5f;
+    --primary-bg: #172554;
+    --success-light: #14532d;
+    --warning-light: #451a03;
+    --error-light: #450a0a;
+    --shadow: 0 1px 3px rgba(0,0,0,.3);
+    --shadow-lg: 0 4px 12px rgba(0,0,0,.4);
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 14px; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+a { color: var(--primary); text-decoration: none; }
+
+/* ===== Topbar ===== */
+.topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+.topbar-left { display: flex; align-items: center; gap: 24px; }
+.logo {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.logo svg { width: 28px; height: 28px; }
+.logo-accent { color: var(--primary); }
+.topbar-nav { display: flex; gap: 4px; }
+.topbar-nav a {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-2);
+    transition: all .15s;
+}
+.topbar-nav a:hover, .topbar-nav a.active { background: var(--primary-bg); color: var(--primary); }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all .15s;
+    font-size: 16px;
+}
+.btn-icon:hover { background: var(--surface-2); color: var(--text); }
+.api-key-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: var(--surface-2);
+    font-size: 12px;
+    color: var(--text-3);
+    font-family: var(--mono);
+    cursor: pointer;
+    border: 1px solid var(--border);
+    transition: all .15s;
+}
+.api-key-pill:hover { border-color: var(--primary); color: var(--text-2); }
+.api-key-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+
+/* ===== Layout ===== */
+.app-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    height: calc(100vh - 56px);
+    overflow: hidden;
+}
+.app-layout.no-result { grid-template-columns: 1fr; }
+
+/* ===== Left Panel: Upload / Document View ===== */
+.panel-left {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    flex-shrink: 0;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--text-3);
+}
+.panel-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+
+/* Upload Zone */
+.upload-zone {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    cursor: pointer;
+    transition: all .2s;
+}
+.upload-zone.dragging { background: var(--primary-bg); }
+.upload-zone.dragging .upload-icon { transform: scale(1.1); color: var(--primary); }
+.upload-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    background: var(--primary-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    transition: all .2s;
+    color: var(--primary);
+    font-size: 28px;
+}
+.upload-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.upload-subtitle { font-size: 13px; color: var(--text-3); margin-bottom: 20px; }
+.upload-btn {
+    padding: 10px 24px;
+    border-radius: var(--radius);
+    background: var(--primary);
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+    border: none;
+    cursor: pointer;
+    transition: background .15s;
+}
+.upload-btn:hover { background: var(--primary-hover); }
+.upload-formats { font-size: 11px; color: var(--text-3); margin-top: 12px; }
+input[type="file"] { display: none; }
+
+/* Document Preview */
+.doc-preview {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: var(--surface-2);
+    position: relative;
+    overflow: hidden;
+}
+.doc-preview img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+}
+.doc-actions {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    padding: 6px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border);
+}
+.doc-actions button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.doc-actions button:hover { background: var(--surface-2); color: var(--text); }
+.doc-actions button.primary-action { background: var(--primary); color: white; }
+.doc-actions button.primary-action:hover { background: var(--primary-hover); }
+
+/* ===== Right Panel: Results ===== */
+.panel-right {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+}
+
+/* Status Bar */
+.status-bar {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.status-badge.success { background: var(--success-light); color: var(--success); }
+.status-badge.warning { background: var(--warning-light); color: var(--warning); }
+.status-badge.error { background: var(--error-light); color: var(--error); }
+.status-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status-info { font-size: 12px; color: var(--text-3); }
+
+/* Doc Type Selector */
+.doc-type-bar {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.doc-type-chip {
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all .15s;
+}
+.doc-type-chip:hover { border-color: var(--primary); color: var(--primary); }
+.doc-type-chip.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+/* Fields Editor */
+.fields-scroll { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.field-group-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--text-3);
+    margin: 20px 0 10px;
+}
+.field-group-title:first-child { margin-top: 0; }
+.field-row {
+    display: grid;
+    grid-template-columns: 140px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+}
+.field-row:last-child { border-bottom: none; }
+.txn-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    margin: 8px 0;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+.txn-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    white-space: nowrap;
+}
+.txn-table th {
+    background: var(--bg-3);
+    padding: 6px 8px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-2);
+    position: sticky;
+    top: 0;
+    border-bottom: 2px solid var(--border);
+}
+.txn-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-1);
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.txn-table tr:hover td { background: var(--bg-2); }
+.txn-table .credit-cell { font-weight: 600; color: var(--success); }
+.txn-table .purpose-cell { white-space: normal; max-width: 300px; }
+.field-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.field-input-wrap { position: relative; }
+.field-input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: var(--font);
+    color: var(--text);
+    background: var(--surface);
+    transition: all .15s;
+    outline: none;
+}
+.field-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+.field-input.edited { border-color: var(--warning); background: var(--warning-light); }
+.field-input:disabled { background: var(--surface-2); color: var(--text-3); }
+.field-conf {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 70px;
+}
+.conf-bar {
+    width: 40px;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--surface-3);
+    overflow: hidden;
+}
+.conf-bar-fill { height: 100%; border-radius: 3px; transition: width .3s; }
+.conf-bar-fill.high { background: var(--success); }
+.conf-bar-fill.medium { background: var(--warning); }
+.conf-bar-fill.low { background: var(--error); }
+.conf-text { font-size: 11px; color: var(--text-3); font-family: var(--mono); min-width: 28px; }
+
+/* Bottom Actions */
+.panel-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
+    background: var(--surface);
+}
+.btn {
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: all .15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.btn:hover { background: var(--surface-2); }
+.btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-success { background: var(--success); color: white; border-color: var(--success); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-group { display: flex; gap: 8px; }
+
+/* Processing overlay */
+.processing-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    backdrop-filter: blur(4px);
+}
+[data-theme="dark"] .processing-overlay { background: rgba(15,23,42,.85); }
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    margin-bottom: 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.processing-text { font-size: 14px; font-weight: 500; color: var(--text-2); }
+.processing-sub { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+
+/* Empty state */
+.empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: var(--text-3);
+}
+.empty-state-icon { font-size: 48px; margin-bottom: 16px; opacity: .5; }
+.empty-state-text { font-size: 14px; font-weight: 500; }
+
+/* Toast */
+.toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 12px 20px;
+    border-radius: var(--radius);
+    background: var(--text);
+    color: var(--bg);
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all .3s;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+
+/* Modal */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    backdrop-filter: blur(2px);
+}
+.modal-overlay.active { display: flex; }
+.modal {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 480px;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 24px;
+}
+.modal h3 { font-size: 16px; margin-bottom: 16px; }
+.modal pre {
+    background: var(--surface-2);
+    padding: 16px;
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: 12px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 400px;
+    overflow-y: auto;
+}
+.modal-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Responsive */
+@media (max-width: 900px) {
+    .app-layout { grid-template-columns: 1fr; height: auto; }
+    .panel-left { min-height: 40vh; border-right: none; border-bottom: 1px solid var(--border); }
+    .panel-right { min-height: 50vh; }
+    .topbar-nav { display: none; }
+}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+    <div class="topbar-left">
+        <div class="logo">
+            <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" fill="#2563eb"/><path d="M8 9h12M8 13h8M8 17h10" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+            Doc<span class="logo-accent">Lens</span>
+        </div>
+        <div class="topbar-nav">
+            <a href="#" class="active">Распознавание</a>
+            <a href="#" onclick="showApiDocs()">API</a>
+            <a href="#" onclick="showHistory()">История</a>
+        </div>
+    </div>
+    <div class="topbar-right">
+        <div class="api-key-pill" onclick="copyApiKey()" title="Нажмите чтобы скопировать">
+            <span class="dot"></span>
+            <span id="apiKeyDisplay">API ключ</span>
+        </div>
+        <button class="btn-icon" onclick="toggleTheme()" title="Тема">
+            <span id="themeIcon">&#9789;</span>
+        </button>
+    </div>
+</div>
+
+<!-- Main Layout -->
+<div class="app-layout" id="appLayout">
+    <!-- Left: Upload / Document -->
+    <div class="panel-left">
+        <div class="panel-header">
+            <span class="panel-title">Документ</span>
+            <div style="display:flex;gap:8px;align-items:center">
+                <select id="docTypeSelect" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);font-size:12px;background:var(--surface);color:var(--text)">
+                    <option value="auto">Авто-определение</option>
+                    <option value="passport_rf">Паспорт РФ</option>
+                    <option value="passport_int">Загранпаспорт</option>
+                    <option value="driving_license">Вод. удостоверение</option>
+                    <option value="snils">СНИЛС</option>
+                    <option value="inn">ИНН</option>
+                    <option value="bank_statement">Банковская выписка</option>
+                </select>
+            </div>
+        </div>
+        <div class="panel-body" id="leftPanel">
+            <!-- Upload Zone (shown initially) -->
+            <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                <div class="upload-icon">&#128196;</div>
+                <div class="upload-title">Загрузите документ</div>
+                <div class="upload-subtitle">Перетащите файл сюда или нажмите для выбора</div>
+                <button class="upload-btn" type="button">Выбрать файл</button>
+                <div class="upload-formats">JPEG, PNG, PDF, HEIC, TXT, CSV, XLSX &mdash; до 20 МБ</div>
+            </div>
+            <input type="file" id="fileInput" accept="image/*,.pdf,.heic,.heif,.txt,.csv,.xlsx,.xls">
+
+            <!-- Document Preview (shown after upload) -->
+            <div class="doc-preview" id="docPreview" style="display:none">
+                <img id="previewImg" src="" alt="Document">
+                <div class="doc-actions" id="docActions">
+                    <button onclick="document.getElementById('fileInput').click()">&#8635; Заменить</button>
+                    <button onclick="reprocess()" class="primary-action">&#9654; Распознать</button>
+                </div>
+            </div>
+
+            <!-- Processing -->
+            <div class="processing-overlay" id="processingOverlay" style="display:none">
+                <div class="spinner"></div>
+                <div class="processing-text">Распознавание...</div>
+                <div class="processing-sub" id="processingStatus">Анализ документа</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Results -->
+    <div class="panel-right" id="panelRight">
+        <!-- Status Bar -->
+        <div class="status-bar" id="statusBar" style="display:none">
+            <div class="status-badge success" id="statusBadge">
+                <span class="dot"></span>
+                <span id="statusText">Распознано</span>
+            </div>
+            <span class="status-info" id="statusInfo"></span>
+        </div>
+
+        <!-- Fields Editor -->
+        <div class="fields-scroll" id="fieldsScroll">
+            <div class="empty-state" id="emptyState">
+                <div class="empty-state-icon">&#128269;</div>
+                <div class="empty-state-text">Загрузите документ для распознавания</div>
+            </div>
+            <div id="fieldsContainer" style="display:none"></div>
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="panel-footer" id="panelFooter" style="display:none">
+            <div class="btn-group">
+                <button class="btn btn-sm" onclick="exportJSON()" title="Скопировать JSON">&#128203; JSON</button>
+                <button class="btn btn-sm" onclick="exportCSV()">&#128196; CSV</button>
+                <button class="btn btn-sm" onclick="showRawJSON()">{ } RAW</button>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-sm" onclick="resetEdits()" id="resetBtn" style="display:none">&#8634; Сбросить</button>
+                <button class="btn btn-sm btn-primary" onclick="saveResult()" id="saveBtn">&#10003; Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JSON Modal -->
+<div class="modal-overlay" id="jsonModal">
+    <div class="modal">
+        <h3>JSON результат</h3>
+        <pre id="jsonContent"></pre>
+        <div class="modal-actions">
+            <button class="btn btn-sm" onclick="closeModal()">Закрыть</button>
+            <button class="btn btn-sm btn-primary" onclick="copyJSON()">Копировать</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== Config =====
+const API_ENDPOINT = '/api/v1/recognize';
+const API_KEY = window.__demoApiKey || 'demo-key';
+
+// ===== State =====
+let currentFile = null;
+let currentResult = null;
+let originalValues = {};
+let editedFields = new Set();
+
+// ===== Field labels =====
+const FIELD_LABELS = {
+    last_name: 'Фамилия',
+    first_name: 'Имя',
+    patronymic: 'Отчество',
+    birth_date: 'Дата рождения',
+    birth_place: 'Место рождения',
+    sex: 'Пол',
+    series: 'Серия',
+    number: 'Номер',
+    department_code: 'Код подразделения',
+    issue_date: 'Дата выдачи',
+    expiry_date: 'Срок действия',
+    issuer: 'Кем выдан',
+    snils_number: 'Номер СНИЛС',
+    inn_number: 'Номер ИНН',
+    dl_number: 'Номер ВУ',
+    categories: 'Категории',
+    nationality: 'Гражданство',
+    residence: 'Место жительства',
+    // Банковская выписка
+    account_number: 'Номер счёта',
+    account_holder: 'Владелец счёта',
+    bank_name: 'Название банка',
+    bank_bik: 'БИК банка',
+    period_start: 'Начало периода',
+    period_end: 'Конец периода',
+    opening_balance: 'Начальный остаток',
+    closing_balance: 'Конечный остаток',
+    total_debit: 'Всего списано',
+    total_credit: 'Всего поступило',
+    transaction_count: 'Кол-во операций',
+    currency: 'Валюта',
+    transactions: 'Операции',
+};
+
+const FIELD_GROUPS = {
+    'Персональные данные': ['last_name', 'first_name', 'patronymic', 'birth_date', 'birth_place', 'sex', 'nationality'],
+    'Документ': ['series', 'number', 'dl_number', 'snils_number', 'inn_number', 'department_code', 'categories'],
+    'Выдача': ['issue_date', 'expiry_date', 'issuer', 'residence'],
+    'Счёт': ['account_number', 'account_holder', 'currency'],
+    'Период и итого': ['period_start', 'period_end', 'total_credit', 'transaction_count'],
+    'Операции': ['transactions'],
+};
+
+// ===== Init =====
+document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    initUpload();
+    document.getElementById('apiKeyDisplay').textContent = API_KEY.substring(0, 18) + '...';
+});
+
+function initUpload() {
+    const zone = document.getElementById('uploadZone');
+    const input = document.getElementById('fileInput');
+
+    ['dragenter', 'dragover'].forEach(e => zone.addEventListener(e, ev => { ev.preventDefault(); zone.classList.add('dragging'); }));
+    ['dragleave', 'drop'].forEach(e => zone.addEventListener(e, ev => { ev.preventDefault(); zone.classList.remove('dragging'); }));
+    zone.addEventListener('drop', ev => { if (ev.dataTransfer.files.length) handleFile(ev.dataTransfer.files[0]); });
+    input.addEventListener('change', () => { if (input.files.length) handleFile(input.files[0]); });
+}
+
+// ===== File Handling =====
+function handleFile(file) {
+    const maxSize = 20 * 1024 * 1024;
+    if (file.size > maxSize) { toast('Файл слишком большой (макс. 20 МБ)'); return; }
+    currentFile = file;
+    showPreview(file);
+    recognize(file);
+}
+
+function showPreview(file) {
+    const zone = document.getElementById('uploadZone');
+    const preview = document.getElementById('docPreview');
+    const img = document.getElementById('previewImg');
+
+    zone.style.display = 'none';
+    preview.style.display = 'flex';
+
+    const nonImageExts = ['pdf', 'txt', 'csv', 'xlsx', 'xls'];
+    const fileExt = (file.name || '').split('.').pop().toLowerCase();
+    const isNonImage = file.type === 'application/pdf' || nonImageExts.includes(fileExt);
+    if (isNonImage) {
+        const icons = {pdf: '&#128196;', txt: '&#128196;', csv: '&#128202;', xlsx: '&#128202;', xls: '&#128202;'};
+        const icon = icons[fileExt] || '&#128196;';
+        img.src = '';
+        img.alt = file.name;
+        img.style.display = 'none';
+        preview.innerHTML = `<div style="text-align:center;color:var(--text-3)"><div style="font-size:48px;margin-bottom:8px">${icon}</div><div style="font-size:14px;font-weight:500">${file.name}</div><div style="font-size:12px;margin-top:4px">${(file.size/1024/1024).toFixed(1)} МБ</div></div>` + (preview.querySelector('.doc-actions')?.outerHTML || '');
+    } else {
+        const reader = new FileReader();
+        reader.onload = e => { img.src = e.target.result; img.style.display = 'block'; };
+        reader.readAsDataURL(file);
+    }
+}
+
+// ===== API Call =====
+async function recognize(file) {
+    const overlay = document.getElementById('processingOverlay');
+    const statusText = document.getElementById('processingStatus');
+    overlay.style.display = 'flex';
+    statusText.textContent = 'Загрузка документа...';
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('document_type', document.getElementById('docTypeSelect').value);
+
+    try {
+        statusText.textContent = 'OCR и анализ...';
+        const startTime = Date.now();
+
+        const response = await fetch(API_ENDPOINT, {
+            method: 'POST',
+            headers: { 'X-API-Key': API_KEY },
+            body: formData,
+        });
+
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(err.detail || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        currentResult = data;
+        displayResult(data, elapsed);
+    } catch (err) {
+        toast('Ошибка: ' + err.message);
+        console.error(err);
+    } finally {
+        overlay.style.display = 'none';
+    }
+}
+
+function reprocess() {
+    if (currentFile) recognize(currentFile);
+}
+
+// ===== Display Result =====
+function displayResult(data, elapsed) {
+    // Status bar
+    const statusBar = document.getElementById('statusBar');
+    const statusBadge = document.getElementById('statusBadge');
+    const statusText = document.getElementById('statusText');
+    const statusInfo = document.getElementById('statusInfo');
+
+    statusBar.style.display = 'flex';
+
+    const docTypeNames = {
+        passport_rf: 'Паспорт РФ',
+        passport_int: 'Загранпаспорт',
+        driving_license: 'Вод. удостоверение',
+        snils: 'СНИЛС',
+        inn: 'ИНН',
+        bank_statement: 'Банковская выписка',
+        unknown: 'Не определён',
+    };
+
+    const numFields = Object.keys(data.fields || {}).length;
+    const conf = data.overall_confidence || 0;
+
+    if (numFields > 0 && conf >= 0.5) {
+        statusBadge.className = 'status-badge success';
+        statusText.textContent = docTypeNames[data.document_type] || data.document_type || 'Распознано';
+    } else if (numFields > 0) {
+        statusBadge.className = 'status-badge warning';
+        statusText.textContent = (docTypeNames[data.document_type] || 'Распознано') + ' (низкая точность)';
+    } else {
+        statusBadge.className = 'status-badge error';
+        statusText.textContent = 'Не удалось распознать';
+    }
+
+    statusInfo.textContent = `${numFields} полей \u00b7 ${elapsed}с \u00b7 ${(conf * 100).toFixed(0)}%`;
+
+    // Fields
+    const container = document.getElementById('fieldsContainer');
+    const empty = document.getElementById('emptyState');
+    const footer = document.getElementById('panelFooter');
+    container.innerHTML = '';
+    container.style.display = 'block';
+    empty.style.display = 'none';
+    footer.style.display = 'flex';
+
+    originalValues = {};
+    editedFields = new Set();
+
+    const fields = data.fields || {};
+
+    // Group fields
+    for (const [groupName, groupKeys] of Object.entries(FIELD_GROUPS)) {
+        const presentKeys = groupKeys.filter(k => k in fields);
+        if (presentKeys.length === 0) continue;
+
+        const title = document.createElement('div');
+        title.className = 'field-group-title';
+        title.textContent = groupName;
+        container.appendChild(title);
+
+        for (const key of presentKeys) {
+            const field = fields[key];
+            const value = typeof field === 'object' ? (field.value || '') : field;
+            const conf = typeof field === 'object' ? (field.confidence || 0) : 0;
+            // Transactions array → render as table
+            if (key === 'transactions' && Array.isArray(value)) {
+                container.appendChild(createTransactionsTable(value));
+                continue;
+            }
+            originalValues[key] = value;
+            container.appendChild(createFieldRow(key, value, conf));
+        }
+    }
+
+    // Ungrouped fields
+    const allGrouped = Object.values(FIELD_GROUPS).flat();
+    const ungrouped = Object.keys(fields).filter(k => !allGrouped.includes(k));
+    if (ungrouped.length > 0) {
+        const title = document.createElement('div');
+        title.className = 'field-group-title';
+        title.textContent = 'Прочее';
+        container.appendChild(title);
+        for (const key of ungrouped) {
+            const field = fields[key];
+            const value = typeof field === 'object' ? (field.value || '') : field;
+            const conf = typeof field === 'object' ? (field.confidence || 0) : 0;
+            originalValues[key] = value;
+            container.appendChild(createFieldRow(key, value, conf));
+        }
+    }
+
+    // Warnings
+    if (data.warnings && data.warnings.length > 0) {
+        const title = document.createElement('div');
+        title.className = 'field-group-title';
+        title.textContent = 'Предупреждения';
+        container.appendChild(title);
+        for (const w of data.warnings) {
+            const div = document.createElement('div');
+            div.style.cssText = 'padding:8px 10px;border-radius:6px;background:var(--warning-light);color:var(--warning);font-size:12px;margin-bottom:6px';
+            div.textContent = w;
+            container.appendChild(div);
+        }
+    }
+}
+
+function createTransactionsTable(txns) {
+    const wrap = document.createElement('div');
+    wrap.className = 'txn-table-wrap';
+    const cols = [
+        {key: 'doc_date', label: 'Дата док.'},
+        {key: 'doc_number', label: '№ док.'},
+        {key: 'counterparty', label: 'Корреспондент'},
+        {key: 'counterparty_inn', label: 'ИНН'},
+        {key: 'counterparty_account', label: 'Счёт корр.'},
+        {key: 'bank_name', label: 'Банк'},
+        {key: 'bik', label: 'БИК'},
+        {key: 'corr_account', label: 'Корсчёт'},
+        {key: 'credit', label: 'Кредит'},
+        {key: 'purpose', label: 'Примечание'},
+    ];
+    let html = '<table class="txn-table"><thead><tr>';
+    html += '<th>№</th>';
+    for (const c of cols) html += `<th>${c.label}</th>`;
+    html += '</tr></thead><tbody>';
+    txns.forEach((t, i) => {
+        html += '<tr>';
+        html += `<td>${i + 1}</td>`;
+        for (const c of cols) {
+            const val = t[c.key] || '';
+            const cls = c.key === 'credit' ? ' class="credit-cell"' : (c.key === 'purpose' ? ' class="purpose-cell"' : '');
+            html += `<td${cls} title="${val}">${val}</td>`;
+        }
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+    return wrap;
+}
+
+function createFieldRow(key, value, conf) {
+    const row = document.createElement('div');
+    row.className = 'field-row';
+    row.dataset.key = key;
+
+    const label = document.createElement('div');
+    label.className = 'field-label';
+    label.textContent = FIELD_LABELS[key] || key;
+    label.title = key;
+
+    const inputWrap = document.createElement('div');
+    inputWrap.className = 'field-input-wrap';
+    const input = document.createElement('input');
+    input.className = 'field-input';
+    input.type = 'text';
+    input.value = value;
+    input.dataset.key = key;
+    input.dataset.original = value;
+    input.addEventListener('input', () => onFieldEdit(input));
+    inputWrap.appendChild(input);
+
+    const confDiv = document.createElement('div');
+    confDiv.className = 'field-conf';
+
+    const confPct = Math.round(conf * 100);
+    const confClass = confPct >= 80 ? 'high' : confPct >= 50 ? 'medium' : 'low';
+
+    const bar = document.createElement('div');
+    bar.className = 'conf-bar';
+    bar.innerHTML = `<div class="conf-bar-fill ${confClass}" style="width:${confPct}%"></div>`;
+
+    const txt = document.createElement('span');
+    txt.className = 'conf-text';
+    txt.textContent = confPct + '%';
+
+    confDiv.appendChild(bar);
+    confDiv.appendChild(txt);
+
+    row.appendChild(label);
+    row.appendChild(inputWrap);
+    row.appendChild(confDiv);
+    return row;
+}
+
+// ===== Field Editing =====
+function onFieldEdit(input) {
+    const key = input.dataset.key;
+    const original = input.dataset.original;
+    if (input.value !== original) {
+        input.classList.add('edited');
+        editedFields.add(key);
+    } else {
+        input.classList.remove('edited');
+        editedFields.delete(key);
+    }
+    document.getElementById('resetBtn').style.display = editedFields.size > 0 ? 'inline-flex' : 'none';
+}
+
+function resetEdits() {
+    document.querySelectorAll('.field-input.edited').forEach(input => {
+        input.value = input.dataset.original;
+        input.classList.remove('edited');
+    });
+    editedFields.clear();
+    document.getElementById('resetBtn').style.display = 'none';
+    toast('Изменения сброшены');
+}
+
+function saveResult() {
+    // Update currentResult with edited values
+    if (currentResult && currentResult.fields) {
+        document.querySelectorAll('.field-input').forEach(input => {
+            const key = input.dataset.key;
+            if (currentResult.fields[key]) {
+                if (typeof currentResult.fields[key] === 'object') {
+                    currentResult.fields[key].value = input.value;
+                    if (editedFields.has(key)) {
+                        currentResult.fields[key].edited = true;
+                        currentResult.fields[key].confidence = 1.0;
+                    }
+                } else {
+                    currentResult.fields[key] = input.value;
+                }
+            }
+        });
+    }
+    // Update originals
+    document.querySelectorAll('.field-input').forEach(input => {
+        input.dataset.original = input.value;
+        input.classList.remove('edited');
+    });
+    editedFields.clear();
+    document.getElementById('resetBtn').style.display = 'none';
+    toast('Результат сохранён');
+}
+
+// ===== Export =====
+function getExportData() {
+    const data = JSON.parse(JSON.stringify(currentResult || {}));
+    // Apply current edits
+    document.querySelectorAll('.field-input').forEach(input => {
+        const key = input.dataset.key;
+        if (data.fields && data.fields[key]) {
+            if (typeof data.fields[key] === 'object') {
+                data.fields[key].value = input.value;
+            } else {
+                data.fields[key] = input.value;
+            }
+        }
+    });
+    return data;
+}
+
+function exportJSON() {
+    const data = getExportData();
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2))
+        .then(() => toast('JSON скопирован'))
+        .catch(() => toast('Не удалось скопировать'));
+}
+
+function exportCSV() {
+    const data = getExportData();
+    if (!data.fields) return;
+    let csv = 'field,value,confidence\n';
+    for (const [k, v] of Object.entries(data.fields)) {
+        const val = typeof v === 'object' ? v.value : v;
+        const conf = typeof v === 'object' ? v.confidence : '';
+        csv += `"${FIELD_LABELS[k] || k}","${(val || '').replace(/"/g, '""')}","${conf}"\n`;
+    }
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `doclens_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('CSV скачан');
+}
+
+function showRawJSON() {
+    const data = getExportData();
+    document.getElementById('jsonContent').textContent = JSON.stringify(data, null, 2);
+    document.getElementById('jsonModal').classList.add('active');
+}
+
+function closeModal() {
+    document.getElementById('jsonModal').classList.remove('active');
+}
+
+function copyJSON() {
+    const text = document.getElementById('jsonContent').textContent;
+    navigator.clipboard.writeText(text).then(() => toast('JSON скопирован')).catch(() => {});
+    closeModal();
+}
+
+// ===== Theme =====
+function initTheme() {
+    const saved = localStorage.getItem('doclens-theme') || 'light';
+    document.documentElement.setAttribute('data-theme', saved);
+    updateThemeIcon(saved);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('doclens-theme', next);
+    updateThemeIcon(next);
+}
+
+function updateThemeIcon(theme) {
+    document.getElementById('themeIcon').innerHTML = theme === 'dark' ? '&#9788;' : '&#9789;';
+}
+
+// ===== Utilities =====
+function copyApiKey() {
+    navigator.clipboard.writeText(API_KEY).then(() => toast('API ключ скопирован'));
+}
+
+function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+function showApiDocs() { window.open('/api/docs', '_blank'); }
+function showHistory() { toast('История будет доступна в следующей версии'); }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocLens — Распознавание документов как сервис</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            color: white;
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        header .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-decoration: none;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        nav a {
+            color: white;
+            text-decoration: none;
+            margin-left: 2rem;
+            transition: opacity 0.3s;
+            font-size: 0.95rem;
+        }
+
+        nav a:hover {
+            opacity: 0.8;
+        }
+
+        .hero {
+            padding: 80px 0;
+            text-align: center;
+            background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: #666;
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-bottom: 3rem;
+        }
+
+        .btn {
+            padding: 12px 28px;
+            border-radius: 6px;
+            font-size: 1rem;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #2563eb;
+            border: 2px solid #2563eb;
+        }
+
+        .btn-secondary:hover {
+            background: #f0f7ff;
+        }
+
+        .features {
+            padding: 80px 0;
+            background: white;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            color: #1e3a8a;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .feature-card {
+            background: #f8fafc;
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            transition: all 0.3s;
+            border: 1px solid #e2e8f0;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+            border-color: #2563eb;
+        }
+
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 1rem;
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            color: white;
+        }
+
+        .feature-card h3 {
+            margin-bottom: 0.5rem;
+            color: #1e3a8a;
+        }
+
+        .feature-card p {
+            color: #666;
+            font-size: 0.95rem;
+        }
+
+        .pricing {
+            padding: 80px 0;
+            background: #f8fafc;
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+        }
+
+        .pricing-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s;
+        }
+
+        .pricing-card:hover {
+            border-color: #2563eb;
+            box-shadow: 0 12px 24px rgba(37, 99, 235, 0.1);
+            transform: translateY(-4px);
+        }
+
+        .pricing-card.featured {
+            border-color: #2563eb;
+            transform: scale(1.05);
+            box-shadow: 0 12px 24px rgba(37, 99, 235, 0.2);
+        }
+
+        .pricing-card.featured .price {
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            color: white;
+        }
+
+        .price-name {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            color: #1e3a8a;
+        }
+
+        .price {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 1rem 0;
+            color: #2563eb;
+        }
+
+        .price-period {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .price-features {
+            list-style: none;
+            margin: 2rem 0;
+            padding: 2rem 0;
+            border-top: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .price-features li {
+            padding: 0.75rem 0;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .price-features li:before {
+            content: "✓";
+            color: #10b981;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .pricing-card .btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .quickstart {
+            padding: 80px 0;
+            background: white;
+        }
+
+        .quickstart-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: center;
+        }
+
+        .quickstart h2 {
+            font-size: 2rem;
+            color: #1e3a8a;
+            margin-bottom: 1.5rem;
+        }
+
+        .quickstart p {
+            color: #666;
+            margin-bottom: 1.5rem;
+            line-height: 1.8;
+        }
+
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            border: 1px solid #334155;
+        }
+
+        .code-block code {
+            white-space: pre;
+        }
+
+        footer {
+            background: #1e293b;
+            color: white;
+            padding: 3rem 0 1rem;
+            margin-top: 2rem;
+        }
+
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .footer-section h3 {
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #cbd5e1;
+        }
+
+        .footer-section a {
+            display: block;
+            color: #94a3b8;
+            text-decoration: none;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            transition: color 0.3s;
+        }
+
+        .footer-section a:hover {
+            color: #2563eb;
+        }
+
+        .footer-bottom {
+            border-top: 1px solid #334155;
+            padding-top: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2rem;
+            }
+
+            .hero-subtitle {
+                font-size: 1rem;
+            }
+
+            .cta-buttons {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .section-title {
+                font-size: 2rem;
+            }
+
+            .quickstart-content {
+                grid-template-columns: 1fr;
+            }
+
+            header .container {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            nav a {
+                margin-left: 0;
+                margin-right: 2rem;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            .pricing-card.featured {
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <a href="/" class="logo">
+                <span class="logo-icon">📄</span>
+                <span>DocLens</span>
+            </a>
+            <nav>
+                <a href="#features">Возможности</a>
+                <a href="#pricing">Тарифы</a>
+                <a href="/demo">Демо</a>
+                <a href="/dashboard">Кабинет</a>
+                <a href="/api/docs">API</a>
+            </nav>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="container">
+            <h1>DocLens</h1>
+            <p class="hero-subtitle">
+                Распознавание документов как сервис. Мощный API для извлечения данных из документов РФ и стран СНГ с высокой точностью.
+            </p>
+            <div class="cta-buttons">
+                <a href="/demo" class="btn btn-primary">
+                    Попробовать бесплатно
+                </a>
+                <a href="/api/docs" class="btn btn-secondary">
+                    Документация API
+                </a>
+            </div>
+            <p style="color: #666; font-size: 0.9rem;">v{{ settings.APP_VERSION }}</p>
+        </div>
+    </section>
+
+    <section class="features" id="features">
+        <div class="container">
+            <h2 class="section-title">Поддерживаемые типы документов</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🛂</div>
+                    <h3>Паспорт РФ</h3>
+                    <p>Полная поддержка паспортов РФ с извлечением всех реквизитов и фото</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📕</div>
+                    <h3>Паспорт СНГ</h3>
+                    <p>Распознавание паспортов стран СНГ (Казахстан, Беларусь, Кыргызстан)</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🚗</div>
+                    <h3>Водительское удостоверение</h3>
+                    <p>Извлечение данных с прав и категорий вождения с высокой точностью</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🆔</div>
+                    <h3>СНИЛС</h3>
+                    <p>Быстрое распознавание номера СНИЛС с проверкой контрольной суммы</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💼</div>
+                    <h3>ИНН</h3>
+                    <p>Автоматизация обработки ИНН физических и юридических лиц</p>
+                </div>
+            </div>
+
+            <h2 class="section-title" style="margin-top: 3rem;">Преимущества DocLens</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>API-first подход</h3>
+                    <p>Полнофункциональное REST API с подробной документацией и SDK для популярных языков</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🏢</div>
+                    <h3>Multi-tenant</h3>
+                    <p>Изоляция данных между клиентами, управление API-ключами и квотами</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>On-premise готово</h3>
+                    <p>Возможность развертывания в собственной инфраструктуре с полной поддержкой</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Аналитика</h3>
+                    <p>Детальные отчеты об использовании API и качестве распознавания</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🚀</div>
+                    <h3>Высокая производительность</h3>
+                    <p>Обработка документов за миллисекунды с 99.9% uptime гарантией</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="pricing" id="pricing">
+        <div class="container">
+            <h2 class="section-title">Прозрачные тарифы</h2>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <div class="price-name">Free</div>
+                    <div class="price">₽0<span class="price-period">/месяц</span></div>
+                    <ul class="price-features">
+                        <li>100 запросов/день</li>
+                        <li>Основные документы</li>
+                        <li>Веб-демо доступ</li>
+                        <li>Email поддержка</li>
+                    </ul>
+                    <button class="btn btn-secondary">Начать</button>
+                </div>
+                <div class="pricing-card">
+                    <div class="price-name">Basic</div>
+                    <div class="price">₽999<span class="price-period">/месяц</span></div>
+                    <ul class="price-features">
+                        <li>1000 запросов/день</li>
+                        <li>Все документы</li>
+                        <li>API доступ</li>
+                        <li>Приоритетная поддержка</li>
+                    </ul>
+                    <button class="btn btn-secondary">Выбрать</button>
+                </div>
+                <div class="pricing-card featured">
+                    <div class="price-name">Pro</div>
+                    <div class="price">₽4999<span class="price-period">/месяц</span></div>
+                    <ul class="price-features">
+                        <li>10000 запросов/день</li>
+                        <li>Все документы</li>
+                        <li>API доступ</li>
+                        <li>Телефонная поддержка</li>
+                        <li>Вебхуки</li>
+                    </ul>
+                    <button class="btn btn-primary">Выбрать</button>
+                </div>
+                <div class="pricing-card">
+                    <div class="price-name">Enterprise</div>
+                    <div class="price">₽99999<span class="price-period">/месяц</span></div>
+                    <ul class="price-features">
+                        <li>100000 запросов/день</li>
+                        <li>Все документы</li>
+                        <li>Выделенный API</li>
+                        <li>On-premise опция</li>
+                        <li>SLA гарантия</li>
+                    </ul>
+                    <button class="btn btn-secondary">Связаться</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="quickstart">
+        <div class="container">
+            <div class="quickstart-content">
+                <div>
+                    <h2>Быстрый старт</h2>
+                    <p>Начните работу с DocLens за несколько минут. Получите API-ключ и отправьте первый запрос прямо сейчас.</p>
+                    <p>Наш API полностью совместим с популярными инструментами и языками программирования.</p>
+                    <a href="/api/docs" class="btn btn-primary">Смотреть полную документацию</a>
+                </div>
+                <div class="code-block">
+<code>curl -X POST https://api.doclens.io/v1/recognize \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "file=@passport.jpg" \
+  -F "document_type=passport_rf"
+
+# Ответ:
+{
+  "status": "success",
+  "document_type": "passport_rf",
+  "confidence": 0.98,
+  "data": {
+    "name": "Иванов Иван Иванович",
+    "passport_number": "4512345678",
+    "date_issued": "2015-03-20",
+    "date_expires": "2025-03-20"
+  }
+}</code>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>Продукт</h3>
+                    <a href="/demo">Демо</a>
+                    <a href="#pricing">Тарифы</a>
+                    <a href="/api/docs">API Документация</a>
+                    <a href="/dashboard">Кабинет</a>
+                </div>
+                <div class="footer-section">
+                    <h3>Компания</h3>
+                    <a href="#about">О нас</a>
+                    <a href="#contact">Контакты</a>
+                    <a href="#blog">Блог</a>
+                    <a href="#security">Безопасность</a>
+                </div>
+                <div class="footer-section">
+                    <h3>Поддержка</h3>
+                    <a href="#docs">Документация</a>
+                    <a href="#faq">FAQ</a>
+                    <a href="#status">Статус сервиса</a>
+                    <a href="#contact">Написать нам</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>&copy; 2024-2026 DocLens. Все права защищены.</span>
+                <span>v{{ settings.APP_VERSION }}</span>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

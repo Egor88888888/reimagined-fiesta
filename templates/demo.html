@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Демо — DocLens</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8fafc;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            color: white;
+            padding: 1rem 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        header .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-decoration: none;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        nav a {
+            color: white;
+            text-decoration: none;
+            margin-left: 2rem;
+            transition: opacity 0.3s;
+            font-size: 0.95rem;
+        }
+
+        nav a:hover {
+            opacity: 0.8;
+        }
+
+        .demo-container {
+            padding: 2rem 0;
+            min-height: 100vh;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: #1e3a8a;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #1e3a8a;
+            font-size: 0.95rem;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+            font-family: inherit;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .upload-area {
+            border: 2px dashed #2563eb;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #f0f7ff;
+        }
+
+        .upload-area:hover {
+            border-color: #1e3a8a;
+            background: #e0efff;
+        }
+
+        .upload-area.dragover {
+            border-color: #1e3a8a;
+            background: #e0efff;
+            transform: scale(1.02);
+        }
+
+        .upload-area input {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-text {
+            color: #1e3a8a;
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .upload-hint {
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        .file-preview {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #f0f7ff;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .file-preview.show {
+            display: block;
+        }
+
+        .file-preview-name {
+            font-weight: 500;
+            color: #1e3a8a;
+            margin-bottom: 0.5rem;
+        }
+
+        .file-preview-actions {
+            display: flex;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            color: white;
+            width: 100%;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-sm {
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #2563eb;
+            border: 1px solid #2563eb;
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        .btn-secondary:hover {
+            background: #f0f7ff;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+            color: #2563eb;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e2e8f0;
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            color: #c33;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .results {
+            display: none;
+        }
+
+        .results.show {
+            display: block;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .result-badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .badge-passport-rf {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-passport-cis {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-driver-license {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-snils {
+            background: #fce7f3;
+            color: #831843;
+        }
+
+        .badge-inn {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-bank-statement {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .confidence-score {
+            text-align: center;
+        }
+
+        .confidence-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #1e3a8a;
+        }
+
+        .confidence-label {
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 2rem;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .data-table th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #1e3a8a;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .data-table tr:hover {
+            background: #f8fafc;
+        }
+
+        .field-name {
+            font-weight: 500;
+            color: #1e3a8a;
+        }
+
+        .field-value {
+            color: #333;
+            font-family: 'Monaco', 'Courier New', monospace;
+            word-break: break-all;
+        }
+
+        .confidence-bar {
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: #10b981;
+            transition: width 0.3s;
+        }
+
+        .confidence-fill.warning {
+            background: #f59e0b;
+        }
+
+        .confidence-fill.error {
+            background: #ef4444;
+        }
+
+        .auto-fill-status {
+            font-size: 0.8rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            display: inline-block;
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .section-title {
+            font-size: 1.2rem;
+            margin: 1.5rem 0 1rem;
+            color: #1e3a8a;
+            font-weight: 600;
+        }
+
+        .validation-results {
+            background: #f0f7ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .validation-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+            font-size: 0.95rem;
+        }
+
+        .validation-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .validation-icon {
+            font-size: 1.2rem;
+        }
+
+        .validation-ok {
+            color: #10b981;
+        }
+
+        .validation-warning {
+            color: #f59e0b;
+        }
+
+        .validation-error {
+            color: #ef4444;
+        }
+
+        .warnings-box {
+            background: #fef3c7;
+            border: 1px solid #fde68a;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .warning-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+            font-size: 0.95rem;
+            color: #92400e;
+        }
+
+        .warning-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .warning-icon {
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 768px) {
+            .demo-grid {
+                grid-template-columns: 1fr;
+            }
+
+            header .container {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            nav {
+                width: 100%;
+            }
+
+            nav a {
+                margin-left: 1rem;
+                margin-right: 1rem;
+            }
+
+            .data-table {
+                font-size: 0.85rem;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 0.75rem 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <a href="/" class="logo">
+                <span class="logo-icon">📄</span>
+                <span>DocLens</span>
+            </a>
+            <nav>
+                <a href="/">Главная</a>
+                <a href="/#pricing">Тарифы</a>
+                <a href="/dashboard">Кабинет</a>
+                <a href="/api/docs">API</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container demo-container">
+        <div class="demo-grid">
+            <div class="card">
+                <h2>📄 Загрузить документ</h2>
+
+                <div class="error" id="error"></div>
+
+                <div class="form-group">
+                    <label for="api-key">API ключ (опционально)</label>
+                    <input
+                        type="password"
+                        id="api-key"
+                        placeholder="Или используйте публичный демо-ключ"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="doc-type">Тип документа</label>
+                    <select id="doc-type">
+                        <option value="auto">Автоопределение</option>
+                        <option value="passport_rf">Паспорт РФ</option>
+                        <option value="passport_cis">Паспорт СНГ</option>
+                        <option value="driver_license">Водительское удостоверение</option>
+                        <option value="snils">СНИЛС</option>
+                        <option value="inn">ИНН</option>
+                        <option value="bank_statement">Банковская выписка</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Документ</label>
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-icon">📤</div>
+                        <div class="upload-text">Перетащите файл сюда</div>
+                        <div class="upload-hint">или нажмите для выбора (JPG, PNG, PDF, TXT, CSV, XLSX)</div>
+                        <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.pdf,.txt,.csv,.xlsx">
+                    </div>
+
+                    <div class="file-preview" id="file-preview">
+                        <div class="file-preview-name" id="file-name"></div>
+                        <div class="file-preview-actions">
+                            <button class="btn btn-secondary btn-sm" id="change-file">Изменить</button>
+                            <button class="btn btn-secondary btn-sm" id="clear-file">Удалить</button>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" id="recognize-btn">
+                    Распознать
+                </button>
+
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p style="margin-top: 1rem;">Обработка документа...</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>✨ Результаты</h2>
+
+                <div class="results" id="results">
+                    <div class="result-header">
+                        <span class="result-badge" id="result-badge"></span>
+                        <div class="confidence-score">
+                            <div class="confidence-value" id="confidence-value"></div>
+                            <div class="confidence-label">Уверенность</div>
+                        </div>
+                    </div>
+
+                    <div class="validation-results" id="validation-results"></div>
+
+                    <div class="warnings-box" id="warnings-box" style="display: none;">
+                        <div style="font-weight: 600; margin-bottom: 0.75rem; color: #92400e;">⚠️ Замечания</div>
+                        <div id="warnings-list"></div>
+                    </div>
+
+                    <div class="section-title">Извлеченные данные</div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Поле</th>
+                                <th>Значение</th>
+                                <th>Уверенность</th>
+                                <th>Статус</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-table"></tbody>
+                    </table>
+
+                    <button class="btn btn-secondary" style="width: 100%;" id="reset-btn">
+                        ← Назад
+                    </button>
+                </div>
+
+                <div id="no-results" style="text-align: center; color: #999; padding: 2rem;">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">👈</div>
+                    <p>Загрузите документ и нажмите "Распознать"</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="health-warning" style="display:none;background:#fef2f2;border:2px solid #ef4444;border-radius:10px;padding:16px 20px;margin:16px auto;max-width:1200px;color:#991b1b;font-size:14px;">
+        <strong style="font-size:16px;">⚠️ Русский язык не установлен в Tesseract!</strong><br>
+        Без русского языкового пакета невозможно распознать ФИО, серию/номер и другие текстовые поля на кириллице.
+        Только даты и числа будут извлечены.<br><br>
+        <strong>Для исправления выполните в терминале:</strong><br>
+        <code style="background:#fee2e2;padding:4px 8px;border-radius:4px;font-size:15px;font-weight:bold;">brew install tesseract-lang</code><br><br>
+        Затем перезапустите DocLens: <code style="background:#fee2e2;padding:4px 8px;border-radius:4px;">bash start.sh</code>
+    </div>
+
+    <script>
+        // Check health on page load
+        fetch('/api/v1/health').then(r=>r.json()).then(h=>{
+            if(h.has_russian===false){
+                document.getElementById('health-warning').style.display='block';
+            }
+        }).catch(()=>{});
+
+        const apiKey = document.getElementById('api-key');
+        // Auto-fill demo key if available
+        if (window.__demoApiKey && !apiKey.value) {
+            apiKey.value = window.__demoApiKey;
+        }
+        const docType = document.getElementById('doc-type');
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const filePreview = document.getElementById('file-preview');
+        const fileName = document.getElementById('file-name');
+        const recognizeBtn = document.getElementById('recognize-btn');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const resultsDiv = document.getElementById('results');
+        const noResults = document.getElementById('no-results');
+        const resultsTable = document.getElementById('results-table');
+        const confidenceValue = document.getElementById('confidence-value');
+        const resultBadge = document.getElementById('result-badge');
+        const resetBtn = document.getElementById('reset-btn');
+        const validationResults = document.getElementById('validation-results');
+        const warningsBox = document.getElementById('warnings-box');
+        const warningsList = document.getElementById('warnings-list');
+
+        let selectedFile = null;
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileSelect);
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                fileInput.files = e.dataTransfer.files;
+                handleFileSelect();
+            }
+        });
+
+        document.getElementById('change-file').addEventListener('click', () => fileInput.click());
+        document.getElementById('clear-file').addEventListener('click', () => {
+            selectedFile = null;
+            fileInput.value = '';
+            filePreview.classList.remove('show');
+            recognizeBtn.disabled = true;
+        });
+
+        recognizeBtn.addEventListener('click', recognize);
+        resetBtn.addEventListener('click', reset);
+
+        function handleFileSelect() {
+            if (fileInput.files.length > 0) {
+                selectedFile = fileInput.files[0];
+                fileName.textContent = selectedFile.name + ' (' + (selectedFile.size / 1024).toFixed(1) + ' KB)';
+                filePreview.classList.add('show');
+                recognizeBtn.disabled = false;
+                error.classList.remove('show');
+            }
+        }
+
+        function showError(message) {
+            error.textContent = message;
+            error.classList.add('show');
+        }
+
+        function hideError() {
+            error.classList.remove('show');
+        }
+
+        async function recognize() {
+            if (!selectedFile) {
+                showError('Пожалуйста, выберите файл');
+                return;
+            }
+
+            recognizeBtn.disabled = true;
+            loading.style.display = 'block';
+            resultsDiv.classList.remove('show');
+            noResults.style.display = 'none';
+            hideError();
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('document_type', docType.value);
+
+            const headers = {};
+            const key = apiKey.value || window.__demoApiKey || '';
+            if (key) {
+                headers['X-API-Key'] = key;
+            }
+
+            try {
+                const response = await fetch('/api/v1/recognize', {
+                    method: 'POST',
+                    body: formData,
+                    headers: headers
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Ошибка при обработке документа');
+                }
+
+                displayResults(data);
+            } catch (err) {
+                showError('Ошибка: ' + err.message);
+                noResults.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+                recognizeBtn.disabled = false;
+            }
+        }
+
+        function displayResults(data) {
+            const docTypeText = {
+                'passport_rf': 'Паспорт РФ',
+                'passport_cis': 'Паспорт СНГ',
+                'driver_license': 'Водительское удостоверение',
+                'snils': 'СНИЛС',
+                'inn': 'ИНН',
+                'bank_statement': 'Банковская выписка',
+                'unknown': 'Не определён'
+            };
+
+            resultBadge.textContent = docTypeText[data.document_type] || data.document_type;
+            resultBadge.className = 'result-badge badge-' + data.document_type;
+
+            const confidence = Math.round((data.overall_confidence || data.confidence || 0) * 100);
+            confidenceValue.textContent = confidence + '%';
+
+            // Validation results
+            if (data.validation && Object.keys(data.validation).length > 0) {
+                let html = '';
+                for (const [vName, vData] of Object.entries(data.validation)) {
+                    const isValid = typeof vData === 'object' ? vData.valid : vData;
+                    const msg = typeof vData === 'object' ? (vData.message || vName) : vName;
+                    const icon = isValid ? '✓' : '✗';
+                    const className = isValid ? 'validation-ok' : 'validation-error';
+                    html += `<div class="validation-item"><span class="validation-icon ${className}">${icon}</span><span>${msg}</span></div>`;
+                }
+                validationResults.innerHTML = html;
+            } else {
+                validationResults.innerHTML = '';
+            }
+
+            // Warnings
+            if (data.warnings && data.warnings.length > 0) {
+                warningsBox.style.display = 'block';
+                const warningsHtml = data.warnings.map(w =>
+                    `<div class="warning-item"><span class="warning-icon">⚠️</span><span>${w}</span></div>`
+                ).join('');
+                warningsList.innerHTML = warningsHtml;
+            } else {
+                warningsBox.style.display = 'none';
+            }
+
+            // Results table — support both data.fields and data.data
+            const fields = data.fields || data.data || {};
+            let tableHtml = '';
+            for (const [fieldName, fieldData] of Object.entries(fields)) {
+                const value = typeof fieldData === 'object' ? fieldData.value : fieldData;
+                const fieldConfidence = typeof fieldData === 'object' ? (fieldData.confidence || 0) : (data.overall_confidence || 0);
+                const fieldConfidencePercent = Math.round(fieldConfidence * 100);
+
+                let barClass = '';
+                if (fieldConfidencePercent >= 95) {
+                    barClass = '';
+                } else if (fieldConfidencePercent >= 70) {
+                    barClass = 'warning';
+                } else {
+                    barClass = 'error';
+                }
+
+                const autoFill = typeof fieldData === 'object' && fieldData.auto_fill;
+                const needsReview = typeof fieldData === 'object' && fieldData.needs_review;
+                let statusBadge = '';
+                if (autoFill) {
+                    statusBadge = '<span class="auto-fill-status" style="color:#16a34a;font-size:0.8rem">✓ Автозаполнение</span>';
+                } else if (needsReview) {
+                    statusBadge = '<span style="color:#ca8a04;font-size:0.8rem">⚠ Проверить</span>';
+                }
+
+                const fieldLabels = {
+                    'last_name': 'Фамилия', 'first_name': 'Имя', 'patronymic': 'Отчество',
+                    'birth_date': 'Дата рождения', 'birth_place': 'Место рождения',
+                    'series': 'Серия', 'number': 'Номер', 'sex': 'Пол',
+                    'issue_date': 'Дата выдачи', 'expiry_date': 'Срок действия',
+                    'issuer': 'Кем выдан', 'department_code': 'Код подразделения',
+                    'residence': 'Место жительства', 'country_code': 'Код страны', 'snils_number': 'Номер СНИЛС',
+                    'inn_number': 'Номер ИНН', 'inn_type': 'Тип ИНН', 'categories': 'Категории',
+                    'account_number': 'Номер счёта', 'account_holder': 'Владелец счёта', 'bank_name': 'Название банка',
+                    'bank_bik': 'БИК банка', 'period_start': 'Дата начала периода', 'period_end': 'Дата конца периода',
+                    'opening_balance': 'Начальный остаток', 'closing_balance': 'Конечный остаток',
+                    'total_debit': 'Всего списано', 'total_credit': 'Всего поступило',
+                    'transaction_count': 'Количество операций', 'currency': 'Валюта', 'transactions': 'Операции'
+                };
+
+                tableHtml += `
+                    <tr>
+                        <td class="field-name">${fieldLabels[fieldName] || fieldName}</td>
+                        <td class="field-value">${value || '—'}</td>
+                        <td>
+                            <div class="confidence-bar">
+                                <div class="confidence-fill ${barClass}" style="width: ${fieldConfidencePercent}%"></div>
+                            </div>
+                            <div style="font-size: 0.8rem; color: #666; margin-top: 0.25rem;">${fieldConfidencePercent}%</div>
+                        </td>
+                        <td>${statusBadge}</td>
+                    </tr>
+                `;
+            }
+            resultsTable.innerHTML = tableHtml;
+
+            resultsDiv.classList.add('show');
+            noResults.style.display = 'none';
+        }
+
+        function reset() {
+            resultsDiv.classList.remove('show');
+            noResults.style.display = 'block';
+            selectedFile = null;
+            fileInput.value = '';
+            filePreview.classList.remove('show');
+            recognizeBtn.disabled = true;
+            hideError();
+        }
+
+        // Initialize
+        recognizeBtn.disabled = true;
+    </script>
+</body>
+</html>
