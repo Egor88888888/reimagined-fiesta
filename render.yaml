@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: doclens
+    runtime: python
+    buildCommand: |
+      pip install -r requirements-render.txt
+      apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-rus
+    startCommand: python run_local.py
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
