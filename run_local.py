@@ -1554,23 +1554,13 @@ class LightweightPipeline:
                 nparr = np.frombuffer(image_bytes, np.uint8)
                 image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-                # If cv2 can't decode (e.g. HEIC), try Pillow with pillow-heif
+                # If cv2 can't decode, try Pillow (without pillow-heif to avoid mode setter bug)
                 if image is None:
                     try:
                         from PIL import Image as PILImage
                         from io import BytesIO as BIO
-                        try:
-                            import pillow_heif
-                            pillow_heif.register_heif_opener()
-                        except (ImportError, Exception):
-                            pass
                         pimg = PILImage.open(BIO(image_bytes))
-                        # Fix for pillow-heif compatibility: convert HeifImageFile to regular PIL Image
-                        if pimg.mode not in ('RGB', 'L', 'RGBA'):
-                            pimg = pimg.convert("RGB")
-                        else:
-                            # Force copy to regular PIL Image to avoid HeifImageFile.mode setter issue
-                            pimg = pimg.copy().convert("RGB")
+                        pimg = pimg.convert("RGB")
                         image = cv2.cvtColor(np.array(pimg), cv2.COLOR_RGB2BGR)
                         logger.info(f"Decoded via Pillow (HEIC/other): {image.shape[1]}x{image.shape[0]}")
                     except Exception as e2:
