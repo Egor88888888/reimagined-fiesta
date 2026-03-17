@@ -1,3 +1,13 @@
+---
+title: DocLens
+emoji: 📄
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+app_port: 7860
+---
+
 # DocLens — Russian Document Recognition SaaS
 
 A production-ready FastAPI-based SaaS platform for automated recognition and extraction of Russian official documents using OCR (Tesseract + EasyOCR). Supports passports, driving licenses, SNILS, and INN documents.
