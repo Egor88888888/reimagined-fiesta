@@ -227,6 +227,7 @@ DOC_TYPE_LABELS = {
     "snils": "СНИЛС",
     "inn": "ИНН",
     "bank_statement": "Банковская выписка",
+    "csv_data": "CSV данные",
 }
 
 
@@ -425,16 +426,154 @@ async def cmd_stats(message: Message):
     )
 
 
+def _is_csv_file(filename: str, data: bytes) -> bool:
+    """Check if file is CSV by extension or content."""
+    if filename and filename.lower().endswith(('.csv', '.tsv', '.txt')):
+        return True
+    try:
+        text = data[:2000].decode('utf-8', errors='ignore')
+        lines = text.strip().split('\n')
+        if len(lines) >= 2:
+            import csv as csv_mod
+            dialect = csv_mod.Sniffer().sniff(text[:4000])
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _parse_csv(data: bytes, filename: str = "") -> dict:
+    """Parse CSV file and return structured result."""
+    import csv as csv_mod
+    from io import StringIO
+
+    # Try different encodings
+    text = None
+    for enc in ['utf-8', 'cp1251', 'latin-1']:
+        try:
+            text = data.decode(enc)
+            break
+        except (UnicodeDecodeError, Exception):
+            continue
+    if not text:
+        return {"error": "Не удалось декодировать файл"}
+
+    # Detect delimiter
+    try:
+        dialect = csv_mod.Sniffer().sniff(text[:4000])
+        delimiter = dialect.delimiter
+    except Exception:
+        delimiter = ';' if ';' in text[:500] else ','
+
+    reader = csv_mod.reader(StringIO(text), delimiter=delimiter)
+    rows = list(reader)
+
+    if not rows:
+        return {"error": "Пустой CSV файл"}
+
+    # Detect header
+    header = rows[0]
+    data_rows = rows[1:]
+
+    # Build summary
+    total_rows = len(data_rows)
+    total_cols = len(header)
+
+    # Sample first 5 data rows
+    sample = data_rows[:5]
+
+    # Detect column types and build field summary
+    fields = {}
+    for i, col_name in enumerate(header):
+        col_name = col_name.strip()
+        if not col_name:
+            col_name = f"col_{i+1}"
+        values = [r[i].strip() for r in data_rows if i < len(r) and r[i].strip()]
+        unique_count = len(set(values))
+
+        fields[col_name] = {
+            "value": values[0] if values else "—",
+            "confidence": 1.0,
+            "source": "csv",
+            "auto_fill": True,
+            "sample": values[:3],
+            "unique_count": unique_count,
+            "fill_rate": f"{len(values)}/{total_rows}",
+        }
+
+    return {
+        "status": "completed",
+        "document_type": "csv_data",
+        "classification_confidence": 1.0,
+        "overall_confidence": 1.0,
+        "fields": fields,
+        "validation": {},
+        "warnings": [],
+        "processing_time_ms": 0,
+        "_csv_meta": {
+            "filename": filename,
+            "rows": total_rows,
+            "columns": total_cols,
+            "headers": header,
+            "sample": sample,
+            "delimiter": delimiter,
+        },
+    }
+
+
+def format_csv_result(result: dict) -> str:
+    """Format CSV parsing result for Telegram."""
+    meta = result.get("_csv_meta", {})
+    filename = meta.get("filename", "файл")
+    rows = meta.get("rows", 0)
+    cols = meta.get("columns", 0)
+    headers = meta.get("headers", [])
+    sample = meta.get("sample", [])
+
+    lines = [
+        f"📊 <b>CSV: {filename}</b>",
+        f"📏 {rows} строк × {cols} столбцов",
+        "",
+        "<b>Столбцы:</b>",
+    ]
+
+    # Show column names with first value
+    fields = result.get("fields", {})
+    for i, col in enumerate(headers[:15]):
+        col = col.strip() or f"col_{i+1}"
+        fdata = fields.get(col, {})
+        sample_val = str(fdata.get("value", "—"))[:40]
+        unique = fdata.get("unique_count", "?")
+        lines.append(f"  • <b>{col}</b>: {sample_val} <i>({unique} уник.)</i>")
+
+    if len(headers) > 15:
+        lines.append(f"  ... и ещё {len(headers) - 15} столбцов")
+
+    # Show first 3 rows as preview
+    if sample:
+        lines.append("")
+        lines.append("<b>Первые строки:</b>")
+        for i, row in enumerate(sample[:3]):
+            row_str = " | ".join(str(v)[:20] for v in row[:5])
+            if len(row) > 5:
+                row_str += " ..."
+            lines.append(f"  {i+1}. {row_str}")
+
+    text = "\n".join(lines)
+    if len(text) > 4000:
+        text = text[:3990] + "\n..."
+    return text
+
+
 @router.message(F.photo | F.document)
 async def handle_document_photo(message: Message):
-    """Handle photo or document upload — recognize via DocLens."""
+    """Handle photo, document, or CSV upload."""
     # Show "processing" indicator
-    processing_msg = await message.answer("⏳ Распознаю документ...")
+    processing_msg = await message.answer("⏳ Обрабатываю файл...")
 
     try:
         # Download file
         if message.photo:
-            # Get highest resolution photo
             photo = message.photo[-1]
             file = await bot.get_file(photo.file_id)
             file_bytes = await bot.download_file(file.file_path)
@@ -444,13 +583,46 @@ async def handle_document_photo(message: Message):
             file_bytes = await bot.download_file(file.file_path)
             filename = message.document.file_name or "document"
         else:
-            await processing_msg.edit_text("❌ Отправьте фото или файл документа.")
+            await processing_msg.edit_text("❌ Отправьте фото или файл.")
             return
 
         # Read bytes
         photo_bytes = file_bytes.read() if hasattr(file_bytes, "read") else file_bytes
 
-        # Recognize via DocLens API
+        # Check if it's a CSV file — handle locally
+        if _is_csv_file(filename, photo_bytes):
+            result = _parse_csv(photo_bytes, filename)
+            if "error" in result:
+                await processing_msg.edit_text(f"❌ {result['error']}")
+                return
+
+            text = format_csv_result(result)
+
+            # Save to DB
+            doc_id = await save_recognition(
+                user_id=message.from_user.id,
+                username=message.from_user.username or "",
+                result=result,
+            )
+            logger.info(f"CSV parsed: {filename}, {result['_csv_meta']['rows']} rows, saved #{doc_id}")
+
+            await processing_msg.edit_text(text, parse_mode=ParseMode.HTML)
+
+            # Send to webhook
+            webhook_data = {
+                "source": "telegram_bot",
+                "telegram_user_id": message.from_user.id,
+                "type": "csv",
+                "filename": filename,
+                "rows": result["_csv_meta"]["rows"],
+                "columns": result["_csv_meta"]["columns"],
+                "headers": result["_csv_meta"]["headers"],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            await send_to_webhook(webhook_data)
+            return
+
+        # Otherwise — recognize document via DocLens API
         result = recognize_document(photo_bytes, filename)
         if asyncio.iscoroutine(result):
             result = await result

@@ -221,10 +221,10 @@ body {
 <div id="page-scanner" class="page active">
   <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
     <div class="upload-icon">📄</div>
-    <div class="upload-text">Нажмите для загрузки фото</div>
-    <div class="upload-hint">Паспорт, СНИЛС, ИНН, ВУ</div>
+    <div class="upload-text">Нажмите для загрузки</div>
+    <div class="upload-hint">Фото документа или CSV файл</div>
   </div>
-  <input type="file" id="fileInput" accept="image/*,application/pdf" capture="environment" style="display:none">
+  <input type="file" id="fileInput" accept="image/*,application/pdf,.csv,.tsv,.txt,.xlsx" capture="environment" style="display:none">
 
   <div class="preview-container" id="previewContainer">
     <img id="previewImg" class="preview-img">
@@ -311,16 +311,35 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
   const file = e.target.files[0];
   if (!file) return;
   currentFile = file;
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    document.getElementById('previewImg').src = ev.target.result;
-    document.getElementById('previewContainer').style.display = 'block';
-    document.getElementById('uploadZone').style.display = 'none';
-    document.getElementById('scanBtn').style.display = 'block';
-    document.getElementById('resultCard').style.display = 'none';
-  };
-  reader.readAsDataURL(file);
-});
+
+  const isCSV = /\.(csv|tsv|txt)$/i.test(file.name);
+
+  if (isCSV) {
+    // Parse CSV locally and show preview
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      const text = ev.target.result;
+      const csvResult = parseCSV(text, file.name);
+      currentResult = csvResult;
+      renderCSVResult(csvResult);
+      document.getElementById('previewContainer').style.display = 'none';
+      document.getElementById('uploadZone').style.display = 'none';
+      document.getElementById('scanBtn').style.display = 'none';
+    };
+    reader.readAsText(file, 'utf-8');
+  } else {
+    // Image/PDF — show preview
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      document.getElementById('previewImg').src = ev.target.result;
+      document.getElementById('previewContainer').style.display = 'block';
+      document.getElementById('uploadZone').style.display = 'none';
+      document.getElementById('scanBtn').style.display = 'block';
+      document.getElementById('resultCard').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  }
+}));
 
 function clearPreview() {
   currentFile = null; currentResult = null;
@@ -555,6 +574,101 @@ async function loadStats() {
   } catch(e) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div>${e.message}</div>`;
   }
+}
+
+function parseCSV(text, filename) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 1) return {error:'Пустой файл'};
+
+  // Detect delimiter
+  const firstLine = lines[0];
+  let delim = ',';
+  if (firstLine.split(';').length > firstLine.split(',').length) delim = ';';
+  if (firstLine.split('\t').length > firstLine.split(delim).length) delim = '\t';
+
+  const rows = lines.map(l => {
+    const result = []; let cur = ''; let inQuote = false;
+    for (const ch of l) {
+      if (ch === '"') { inQuote = !inQuote; }
+      else if (ch === delim && !inQuote) { result.push(cur.trim()); cur = ''; }
+      else { cur += ch; }
+    }
+    result.push(cur.trim());
+    return result;
+  });
+
+  const headers = rows[0];
+  const dataRows = rows.slice(1).filter(r => r.some(c => c));
+  const fields = {};
+
+  headers.forEach((h, i) => {
+    const colName = h || `col_${i+1}`;
+    const vals = dataRows.map(r => (r[i]||'').trim()).filter(v => v);
+    const uniq = new Set(vals).size;
+    fields[colName] = {
+      value: vals[0] || '—', confidence: 1.0, source: 'csv',
+      sample: vals.slice(0,3), unique_count: uniq,
+      fill_rate: `${vals.length}/${dataRows.length}`,
+    };
+  });
+
+  return {
+    document_type: 'csv_data', overall_confidence: 1.0,
+    fields, _csv_meta: {
+      filename, rows: dataRows.length, columns: headers.length,
+      headers, sample: dataRows.slice(0,10), delimiter: delim,
+    },
+  };
+}
+
+function renderCSVResult(result) {
+  const card = document.getElementById('resultCard');
+  const m = result._csv_meta || {};
+
+  let tableHtml = '<div style="overflow-x:auto;margin-top:12px;">';
+  tableHtml += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  tableHtml += '<tr>';
+  (m.headers||[]).forEach(h => {
+    tableHtml += `<th style="padding:6px 8px;background:var(--secondary-bg);border:1px solid rgba(0,0,0,0.08);text-align:left;font-size:11px;white-space:nowrap;">${h||'—'}</th>`;
+  });
+  tableHtml += '</tr>';
+  (m.sample||[]).slice(0,10).forEach(row => {
+    tableHtml += '<tr>';
+    row.forEach(cell => {
+      const v = String(cell||'').substring(0,30);
+      tableHtml += `<td style="padding:4px 8px;border:1px solid rgba(0,0,0,0.06);font-size:11px;">${v}</td>`;
+    });
+    tableHtml += '</tr>';
+  });
+  tableHtml += '</table></div>';
+
+  const colInfo = (m.headers||[]).slice(0,10).map((h,i) => {
+    const f = result.fields[h||`col_${i+1}`] || {};
+    return `<div class="field-row">
+      <span class="field-label">${h||'col_'+(i+1)}</span>
+      <div class="field-value-wrap">
+        <span class="field-value">${f.unique_count||0} уник.</span>
+        <span style="font-size:11px;color:var(--hint);">${f.fill_rate||''}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  card.innerHTML = `
+    <div class="result-header">
+      <span class="doc-type">📊 ${m.filename||'CSV'}</span>
+      <span class="confidence-badge conf-high">${m.rows} строк</span>
+    </div>
+    <div style="font-size:13px;color:var(--hint);margin-bottom:8px;">
+      ${m.columns} столбцов · разделитель: "${m.delimiter === '\t' ? 'TAB' : m.delimiter}"
+    </div>
+    ${colInfo}
+    ${tableHtml}
+    <button onclick="clearPreview()" style="width:100%;padding:10px;border:none;border-radius:10px;
+      background:var(--secondary-bg);color:var(--text);font-size:14px;cursor:pointer;margin-top:12px;">
+      Загрузить другой файл
+    </button>
+  `;
+  card.style.display = 'block';
 }
 
 async function trainModel() {
