@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DocLens</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root {
+  --bg: var(--tg-theme-bg-color, #ffffff);
+  --text: var(--tg-theme-text-color, #000000);
+  --hint: var(--tg-theme-hint-color, #999999);
+  --link: var(--tg-theme-link-color, #2481cc);
+  --btn: var(--tg-theme-button-color, #3390ec);
+  --btn-text: var(--tg-theme-button-text-color, #ffffff);
+  --secondary-bg: var(--tg-theme-secondary-bg-color, #f0f0f0);
+  --section-bg: var(--tg-theme-section-bg-color, #ffffff);
+  --radius: 12px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; padding-bottom: 80px;
+}
+
+/* ===== Navigation Tabs ===== */
+.tabs {
+  display: flex; position: sticky; top: 0; z-index: 100;
+  background: var(--section-bg);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  padding: 0 8px;
+}
+.tab {
+  flex: 1; padding: 12px 8px; text-align: center; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: var(--hint);
+  border-bottom: 2px solid transparent; transition: all 0.2s;
+}
+.tab.active { color: var(--btn); border-bottom-color: var(--btn); }
+.tab-icon { font-size: 18px; display: block; margin-bottom: 2px; }
+
+/* ===== Pages ===== */
+.page { display: none; padding: 16px; }
+.page.active { display: block; }
+
+/* ===== Scanner Page ===== */
+.upload-zone {
+  border: 2px dashed rgba(0,0,0,0.15); border-radius: var(--radius);
+  padding: 40px 20px; text-align: center; cursor: pointer;
+  transition: all 0.3s; background: var(--secondary-bg);
+}
+.upload-zone:active { transform: scale(0.98); }
+.upload-zone.dragover { border-color: var(--btn); background: rgba(51,144,236,0.05); }
+.upload-icon { font-size: 48px; margin-bottom: 12px; }
+.upload-text { font-size: 15px; color: var(--hint); }
+.upload-hint { font-size: 12px; color: var(--hint); margin-top: 8px; }
+
+.preview-container { position: relative; margin-top: 12px; display: none; }
+.preview-img {
+  width: 100%; border-radius: var(--radius); max-height: 300px;
+  object-fit: contain; background: var(--secondary-bg);
+}
+.preview-remove {
+  position: absolute; top: 8px; right: 8px;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(0,0,0,0.5); color: #fff; border: none;
+  font-size: 16px; cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+}
+
+.scan-btn {
+  width: 100%; padding: 14px; border: none; border-radius: var(--radius);
+  background: var(--btn); color: var(--btn-text);
+  font-size: 16px; font-weight: 600; cursor: pointer;
+  margin-top: 16px; display: none; transition: all 0.2s;
+}
+.scan-btn:disabled { opacity: 0.5; }
+.scan-btn:active { transform: scale(0.98); }
+
+/* ===== Result Card ===== */
+.result-card {
+  background: var(--section-bg); border-radius: var(--radius);
+  padding: 16px; margin-top: 16px; display: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.result-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px; padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+.doc-type { font-size: 16px; font-weight: 600; }
+.confidence-badge {
+  padding: 4px 10px; border-radius: 20px; font-size: 12px;
+  font-weight: 600; color: #fff;
+}
+.conf-high { background: #34c759; }
+.conf-mid { background: #ff9500; }
+.conf-low { background: #ff3b30; }
+
+.field-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.04);
+}
+.field-row:last-child { border-bottom: none; }
+.field-label { font-size: 13px; color: var(--hint); flex-shrink: 0; }
+.field-value-wrap { display: flex; align-items: center; gap: 6px; }
+.field-value {
+  font-size: 14px; font-weight: 500; text-align: right;
+  max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+}
+.field-edit-btn {
+  background: none; border: none; color: var(--link);
+  font-size: 16px; cursor: pointer; padding: 4px;
+}
+.ml-badge {
+  font-size: 10px; background: rgba(51,144,236,0.1);
+  color: var(--link); padding: 2px 6px; border-radius: 8px;
+}
+.conf-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* ===== Edit Modal ===== */
+.modal-overlay {
+  display: none; position: fixed; top:0; left:0; right:0; bottom:0;
+  background: rgba(0,0,0,0.4); z-index: 200;
+  align-items: flex-end; justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: var(--section-bg); border-radius: 16px 16px 0 0;
+  width: 100%; max-width: 480px; padding: 20px;
+  animation: slideUp 0.3s ease;
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.modal-title { font-size: 17px; font-weight: 600; margin-bottom: 16px; }
+.modal-input {
+  width: 100%; padding: 12px; border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 10px; font-size: 16px; background: var(--secondary-bg);
+  color: var(--text); outline: none;
+}
+.modal-input:focus { border-color: var(--btn); }
+.modal-hint { font-size: 12px; color: var(--hint); margin-top: 6px; }
+.modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+.modal-actions button {
+  flex: 1; padding: 12px; border: none; border-radius: 10px;
+  font-size: 15px; font-weight: 500; cursor: pointer;
+}
+.modal-cancel { background: var(--secondary-bg); color: var(--text); }
+.modal-save { background: var(--btn); color: var(--btn-text); }
+
+/* ===== History Page ===== */
+.history-item {
+  background: var(--section-bg); border-radius: var(--radius);
+  padding: 14px; margin-bottom: 10px; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.2s;
+}
+.history-item:active { transform: scale(0.98); }
+.history-top { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.history-type { font-weight: 600; font-size: 14px; }
+.history-date { font-size: 12px; color: var(--hint); }
+.history-fields { font-size: 13px; color: var(--hint); }
+.empty-state { text-align: center; padding: 60px 20px; color: var(--hint); }
+.empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+/* ===== Stats Page ===== */
+.stat-card {
+  background: var(--section-bg); border-radius: var(--radius);
+  padding: 16px; margin-bottom: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.stat-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+.stat-label { color: var(--hint); font-size: 13px; }
+.stat-value { font-weight: 600; font-size: 14px; }
+.ml-status-dot {
+  display: inline-block; width: 8px; height: 8px;
+  border-radius: 50%; margin-right: 6px;
+}
+.ml-active { background: #34c759; }
+.ml-learning { background: #ff9500; }
+.ml-inactive { background: #ff3b30; }
+
+/* ===== Loading ===== */
+.spinner {
+  display: inline-block; width: 20px; height: 20px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff; border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.processing-overlay {
+  display: none; position: fixed; top:0; left:0; right:0; bottom:0;
+  background: rgba(0,0,0,0.5); z-index: 300;
+  align-items: center; justify-content: center; flex-direction: column;
+}
+.processing-overlay.active { display: flex; }
+.processing-text { color: #fff; font-size: 16px; margin-top: 16px; }
+.processing-spinner {
+  width: 48px; height: 48px; border: 3px solid rgba(255,255,255,0.3);
+  border-top-color: #fff; border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<div class="tabs">
+  <div class="tab active" onclick="showPage('scanner')">
+    <span class="tab-icon">📷</span>Скан
+  </div>
+  <div class="tab" onclick="showPage('history')">
+    <span class="tab-icon">📋</span>История
+  </div>
+  <div class="tab" onclick="showPage('stats')">
+    <span class="tab-icon">📊</span>ML
+  </div>
+</div>
+
+<!-- Scanner Page -->
+<div id="page-scanner" class="page active">
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+    <div class="upload-icon">📄</div>
+    <div class="upload-text">Нажмите для загрузки фото</div>
+    <div class="upload-hint">Паспорт, СНИЛС, ИНН, ВУ</div>
+  </div>
+  <input type="file" id="fileInput" accept="image/*,application/pdf" capture="environment" style="display:none">
+
+  <div class="preview-container" id="previewContainer">
+    <img id="previewImg" class="preview-img">
+    <button class="preview-remove" onclick="clearPreview()">✕</button>
+  </div>
+
+  <button class="scan-btn" id="scanBtn" onclick="recognizeDocument()">
+    Распознать документ
+  </button>
+
+  <div class="result-card" id="resultCard"></div>
+</div>
+
+<!-- History Page -->
+<div id="page-history" class="page">
+  <div id="historyList"></div>
+</div>
+
+<!-- Stats Page -->
+<div id="page-stats" class="page">
+  <div id="statsContent"></div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-title" id="editTitle">Исправить поле</div>
+    <input class="modal-input" id="editInput" placeholder="Введите правильное значение">
+    <div class="modal-hint" id="editHint"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeEditModal()">Отмена</button>
+      <button class="modal-save" onclick="saveCorrection()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Processing Overlay -->
+<div class="processing-overlay" id="processingOverlay">
+  <div class="processing-spinner"></div>
+  <div class="processing-text">Распознаю документ...</div>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.enableClosingConfirmation();
+}
+
+// Config from bot
+const API_URL = new URLSearchParams(window.location.search).get('api') || '';
+const API_KEY = new URLSearchParams(window.location.search).get('key') || '';
+const USER_ID = new URLSearchParams(window.location.search).get('uid') || '';
+
+const FIELD_LABELS = {
+  last_name:'Фамилия', first_name:'Имя', patronymic:'Отчество',
+  birth_date:'Дата рождения', birth_place:'Место рождения', sex:'Пол',
+  series:'Серия', number:'Номер', issue_date:'Дата выдачи',
+  issuer:'Кем выдан', department_code:'Код подразд.',
+};
+const DOC_LABELS = {
+  passport_rf:'Паспорт РФ', passport_cis:'Паспорт СНГ',
+  driver_license:'Вод. удостоверение', snils:'СНИЛС',
+  inn:'ИНН', bank_statement:'Банк. выписка',
+};
+
+let currentFile = null;
+let currentResult = null;
+let editingField = null;
+
+// ===== Navigation =====
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelector(`.tab[onclick*="${name}"]`).classList.add('active');
+  if (name === 'history') loadHistory();
+  if (name === 'stats') loadStats();
+}
+
+// ===== File Upload =====
+document.getElementById('fileInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  currentFile = file;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    document.getElementById('previewImg').src = ev.target.result;
+    document.getElementById('previewContainer').style.display = 'block';
+    document.getElementById('uploadZone').style.display = 'none';
+    document.getElementById('scanBtn').style.display = 'block';
+    document.getElementById('resultCard').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+});
+
+function clearPreview() {
+  currentFile = null; currentResult = null;
+  document.getElementById('previewContainer').style.display = 'none';
+  document.getElementById('uploadZone').style.display = 'block';
+  document.getElementById('scanBtn').style.display = 'none';
+  document.getElementById('resultCard').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+}
+
+// ===== Recognition =====
+async function recognizeDocument() {
+  if (!currentFile) return;
+  const btn = document.getElementById('scanBtn');
+  const overlay = document.getElementById('processingOverlay');
+  btn.disabled = true;
+  overlay.classList.add('active');
+
+  try {
+    const form = new FormData();
+    form.append('file', currentFile);
+
+    const resp = await fetch(API_URL + '/api/v1/recognize', {
+      method: 'POST', headers: {'X-API-Key': API_KEY}, body: form,
+    });
+    const data = await resp.json();
+    currentResult = data;
+    renderResult(data);
+
+    // Notify bot via Telegram WebApp
+    if (tg && data.fields) {
+      tg.sendData(JSON.stringify({
+        action: 'recognition_complete',
+        document_type: data.document_type,
+        fields_count: Object.keys(data.fields || {}).length,
+        confidence: data.overall_confidence,
+      }));
+    }
+  } catch(e) {
+    document.getElementById('resultCard').innerHTML =
+      `<div style="color:#ff3b30;text-align:center;padding:20px;">❌ ${e.message}</div>`;
+    document.getElementById('resultCard').style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    overlay.classList.remove('active');
+  }
+}
+
+function renderResult(data) {
+  const card = document.getElementById('resultCard');
+  if (!data || data.error) {
+    card.innerHTML = `<div style="text-align:center;padding:20px;color:#ff3b30;">
+      ❌ ${data?.error || 'Ошибка распознавания'}</div>`;
+    card.style.display = 'block';
+    return;
+  }
+
+  const docLabel = DOC_LABELS[data.document_type] || data.document_type;
+  const conf = (data.overall_confidence || 0);
+  const confClass = conf >= 0.95 ? 'conf-high' : conf >= 0.7 ? 'conf-mid' : 'conf-low';
+  const timeMs = data.processing_time_ms || 0;
+
+  let fieldsHtml = '';
+  const important = ['last_name','first_name','patronymic','series','number',
+    'birth_date','birth_place','sex','issue_date','issuer','department_code'];
+  const fields = data.fields || {};
+
+  for (const name of important) {
+    if (!fields[name] || typeof fields[name] !== 'object') continue;
+    const f = fields[name];
+    const label = FIELD_LABELS[name] || name;
+    const val = String(f.value || '—').substring(0, 80);
+    const fc = f.confidence || 0;
+    const dotColor = fc >= 0.95 ? '#34c759' : fc >= 0.7 ? '#ff9500' : '#ff3b30';
+    const mlBadge = f.ml_corrected ? '<span class="ml-badge">ML</span>' : '';
+
+    fieldsHtml += `<div class="field-row">
+      <span class="field-label">${label}</span>
+      <div class="field-value-wrap">
+        ${mlBadge}
+        <span class="field-value">${val}</span>
+        <div class="conf-dot" style="background:${dotColor}"></div>
+        <button class="field-edit-btn" onclick="openEditModal('${name}','${val.replace(/'/g,"\\'")}')">✏️</button>
+      </div>
+    </div>`;
+  }
+
+  card.innerHTML = `
+    <div class="result-header">
+      <span class="doc-type">📄 ${docLabel}</span>
+      <span class="confidence-badge ${confClass}">${Math.round(conf*100)}%</span>
+    </div>
+    <div style="font-size:12px;color:var(--hint);margin-bottom:12px;">⏱ ${timeMs}мс</div>
+    ${fieldsHtml}
+  `;
+  card.style.display = 'block';
+}
+
+// ===== Edit / Correction =====
+function openEditModal(fieldName, currentValue) {
+  editingField = fieldName;
+  document.getElementById('editTitle').textContent =
+    'Исправить: ' + (FIELD_LABELS[fieldName] || fieldName);
+  document.getElementById('editInput').value = currentValue === '—' ? '' : currentValue;
+  document.getElementById('editHint').textContent =
+    'Текущее: ' + currentValue;
+  document.getElementById('editModal').classList.add('active');
+  document.getElementById('editInput').focus();
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('active');
+  editingField = null;
+}
+
+async function saveCorrection() {
+  if (!editingField || !currentResult) return;
+  const newValue = document.getElementById('editInput').value.trim();
+  if (!newValue) return;
+
+  const oldValue = currentResult.fields[editingField]?.value || '';
+
+  // Send correction to ML endpoint
+  try {
+    await fetch(API_URL + '/api/v1/ml/corrections', {
+      method: 'POST',
+      headers: {'X-API-Key': API_KEY, 'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        recognition_id: currentResult.id || '',
+        document_type: currentResult.document_type || '',
+        corrections: [{
+          field_name: editingField,
+          original_value: oldValue,
+          corrected_value: newValue,
+          confidence: currentResult.fields[editingField]?.confidence || 0,
+        }],
+      }),
+    });
+  } catch(e) {
+    console.error('ML correction failed:', e);
+  }
+
+  // Update local state
+  if (currentResult.fields[editingField]) {
+    currentResult.fields[editingField].value = newValue;
+    currentResult.fields[editingField].ml_corrected = true;
+  }
+  renderResult(currentResult);
+  closeEditModal();
+
+  if (tg) tg.HapticFeedback?.impactOccurred('light');
+}
+
+// ===== History =====
+async function loadHistory() {
+  const list = document.getElementById('historyList');
+  try {
+    const resp = await fetch(API_URL + '/api/v1/recognitions', {
+      headers: {'X-API-Key': API_KEY},
+    });
+    const data = await resp.json();
+
+    if (!data.length) {
+      list.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Нет распознаваний</div>';
+      return;
+    }
+
+    list.innerHTML = data.slice(0, 20).map(r => {
+      const docLabel = DOC_LABELS[r.document_type] || r.document_type || 'Документ';
+      const conf = r.overall_confidence || 0;
+      const date = r.created_at ? new Date(r.created_at).toLocaleString('ru') : '';
+      const name = r.fields?.last_name?.value || r.original_filename || '';
+      return `<div class="history-item">
+        <div class="history-top">
+          <span class="history-type">${docLabel}</span>
+          <span class="history-date">${date}</span>
+        </div>
+        <div class="history-fields">${name} · ${Math.round(conf*100)}%</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div>${e.message}</div>`;
+  }
+}
+
+// ===== Stats / ML =====
+async function loadStats() {
+  const el = document.getElementById('statsContent');
+  try {
+    const [usageResp, mlResp] = await Promise.all([
+      fetch(API_URL + '/api/v1/usage', {headers: {'X-API-Key': API_KEY}}),
+      fetch(API_URL + '/api/v1/ml/train/status', {headers: {'X-API-Key': API_KEY}}),
+    ]);
+    const usage = await usageResp.json();
+    const ml = await mlResp.json();
+
+    const mlLoaded = ml.ml_model_loaded;
+    const mlDot = mlLoaded ? 'ml-active' : ml.pending_corrections > 0 ? 'ml-learning' : 'ml-inactive';
+    const mlLabel = mlLoaded ? 'Модель активна' : ml.ready_for_training ? 'Готова к обучению' : 'Собирает данные';
+    const lastRun = ml.last_training_run;
+
+    el.innerHTML = `
+      <div class="stat-card">
+        <div style="font-weight:600;margin-bottom:12px;">📊 Использование</div>
+        <div class="stat-row"><span class="stat-label">Тариф</span><span class="stat-value">${usage.plan || 'free'}</span></div>
+        <div class="stat-row"><span class="stat-label">Сегодня</span><span class="stat-value">${usage.today_used || 0} / ${usage.daily_limit || 100}</span></div>
+        <div class="stat-row"><span class="stat-label">За период</span><span class="stat-value">${usage.period_total || 0}</span></div>
+        <div class="stat-row"><span class="stat-label">Успешных</span><span class="stat-value">${usage.period_successful || 0}</span></div>
+        <div class="stat-row"><span class="stat-label">Ср. время</span><span class="stat-value">${Math.round(usage.avg_processing_ms || 0)}мс</span></div>
+      </div>
+
+      <div class="stat-card">
+        <div style="font-weight:600;margin-bottom:12px;">🤖 ML обучение</div>
+        <div class="stat-row">
+          <span class="stat-label">Статус</span>
+          <span class="stat-value"><span class="ml-status-dot ${mlDot}"></span>${mlLabel}</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Паттернов</span><span class="stat-value">${ml.active_patterns || 0}</span></div>
+        <div class="stat-row"><span class="stat-label">Коррекций (ожидают)</span><span class="stat-value">${ml.pending_corrections || 0}</span></div>
+        ${lastRun ? `
+        <div class="stat-row"><span class="stat-label">Последнее обучение</span><span class="stat-value">${lastRun.accuracy_after ? Math.round(lastRun.accuracy_after*100)+'%' : '—'}</span></div>
+        ` : ''}
+        ${ml.ready_for_training ? `
+        <button onclick="trainModel()" style="width:100%;padding:10px;border:none;border-radius:10px;
+          background:var(--btn);color:var(--btn-text);font-size:14px;font-weight:500;
+          cursor:pointer;margin-top:12px;">🧠 Запустить обучение</button>
+        ` : `<div style="font-size:12px;color:var(--hint);margin-top:8px;">
+          Нужно минимум 20 коррекций для обучения (сейчас: ${ml.pending_corrections || 0})
+        </div>`}
+      </div>
+    `;
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div>${e.message}</div>`;
+  }
+}
+
+async function trainModel() {
+  try {
+    const resp = await fetch(API_URL + '/api/v1/ml/train', {
+      method: 'POST',
+      headers: {'X-API-Key': API_KEY, 'Content-Type': 'application/json'},
+      body: JSON.stringify({force: true}),
+    });
+    const data = await resp.json();
+    if (tg) tg.HapticFeedback?.notificationOccurred('success');
+    alert(data.status === 'completed'
+      ? `Обучение завершено! Точность: ${Math.round((data.accuracy_after||0)*100)}%`
+      : data.error || 'Ошибка обучения');
+    loadStats();
+  } catch(e) {
+    alert('Ошибка: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>

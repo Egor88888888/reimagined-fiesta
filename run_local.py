@@ -4209,6 +4209,15 @@ document.getElementById('resultWarnings').innerHTML=whtml}
 </script></body></html>"""
 
 
+@app.get("/webapp", response_class=HTMLResponse)
+async def telegram_webapp():
+    """Serve Telegram MiniApp HTML."""
+    webapp_path = BASE_DIR / "telegram_bot" / "webapp.html"
+    if webapp_path.exists():
+        return HTMLResponse(webapp_path.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>MiniApp not found</h1>", status_code=404)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def landing():
     tpl = BASE_DIR / "templates" / "index.html"
